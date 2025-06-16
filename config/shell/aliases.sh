@@ -11,7 +11,6 @@ alias egrep="egrep --color=auto"
 
 # Editor shortcuts
 alias v="$EDITOR"
-alias settings="$EDITOR ~/.zshrc"
 
 # Directory navigation
 alias ..="cd .."
@@ -39,6 +38,7 @@ update() {
     case "$SHELL" in
         */zsh)
             echo "Reloading zsh configuration..."
+            source ~/.zshenv
             source ~/.zshrc
             ;;
         */bash)

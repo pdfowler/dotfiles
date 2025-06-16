@@ -45,9 +45,10 @@ create_symlink "$DOTFILES_DIR/config/shell/env.sh" "$HOME/.config/shell/env.sh"
 create_symlink "$DOTFILES_DIR/config/shell/paths.sh" "$HOME/.config/shell/paths.sh"
 create_symlink "$DOTFILES_DIR/config/shell/aliases.sh" "$HOME/.config/shell/aliases.sh"
 
-# Create symlinks for zsh files
-echo -e "${YELLOW}Creating zsh configuration symlinks...${NC}"
+# Create symlinks for shell-specific files
+echo -e "${YELLOW}Creating shell-specific configuration symlinks...${NC}"
 create_symlink "$DOTFILES_DIR/zshenv" "$HOME/.zshenv"
+create_symlink "$DOTFILES_DIR/config/shell/bashrc" "$HOME/.bashrc"
 
 # Optional: Create a private config file if it doesn't exist
 if [[ ! -f ~/.config/shell/private.sh ]]; then
@@ -65,7 +66,7 @@ fi
 
 echo -e "${GREEN}✅ Dotfiles installation complete!${NC}"
 echo -e "${YELLOW}💡 Don't forget to:${NC}"
-echo "  1. Add sensitive data to ~/.config/shell/private.sh"
+echo "  1. Add sensitive data to ~/.config/shell/private.sh (all 'private' files are git ignored)"
 echo "  2. Run 'update' or restart this and other terminal sessions"
 if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
     echo "  3. Initialize git repo: cd $DOTFILES_DIR && git init"

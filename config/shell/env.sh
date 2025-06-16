@@ -2,8 +2,8 @@
 # This file is sourced by both interactive and non-interactive shells
 
 # Editor preferences
-export EDITOR="code"
-export VISUAL="code"
+export EDITOR="vi"
+export VISUAL="cursor"
 
 # Development tools
 export HOMEBREW_NO_ENV_HINTS=true
