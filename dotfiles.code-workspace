@@ -1,0 +1,30 @@
+{
+  "folders": [
+    {
+      "name": "Dotfiles Repo",
+      "path": "/Users/pdfowler/Development/dotfiles"
+    },
+    {
+      "name": "Home Dotfiles",
+      "path": "/Users/pdfowler/Development/dotfiles/HOME_CONFIG"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "HOME_CONFIG/.DS_Store": true,
+      "HOME_CONFIG/.Trash": true,
+      "HOME_CONFIG/.localized": true,
+      "HOME_CONFIG/.CFUserTextEncoding": true
+    },
+    "search.exclude": {
+      "HOME_CONFIG/.*/**": true
+    },
+    "files.watcherExclude": {
+      "HOME_CONFIG/.cache/**": true,
+      "HOME_CONFIG/.docker/logs/**": true,
+      "HOME_CONFIG/.npm/**": true,
+      "HOME_CONFIG/.nvm/**": true,
+      "**/node_modules/**": true
+    }
+  }
+}

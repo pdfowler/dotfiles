@@ -1,0 +1,19 @@
+{
+  "files.exclude": {
+    "~/[^.]*": true,
+    "~/.*": false,
+    "~/.Trash": true,
+    "~/.DS_Store": true,
+    "~/.localized": true,
+    "~/.CFUserTextEncoding": true
+  },
+  "search.exclude": {
+    "~/[^.]*": true
+  },
+  "files.watcherExclude": {
+    "~/[^.]*": true,
+    "~/.git/objects/**": true,
+    "~/.git/subtree-cache/**": true,
+    "**/node_modules/**": true
+  }
+} 
