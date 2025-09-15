@@ -27,3 +27,10 @@ export LSCOLORS=ExFxBxDxCxegedabagacad
 
 ## SHIFTSMART
 export SHIFTSMART_ROOT="$HOME/Development/shiftsmart"
+
+## NX
+export NX_PARALLEL=10
+
+# Source private configuration (contains sensitive data like API keys, tokens)
+# This is also sourced in zshenv, but adding here as backup for cross-shell compatibility
+[[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh

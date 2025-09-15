@@ -1,0 +1,20 @@
+# ~/.zshenv - Always sourced by zsh (login, interactive, non-interactive)
+# This is the key for making configurations available to non-interactive shells
+
+# Source cross-shell compatible configurations
+[[ -f ~/.config/shell/env.sh ]] && source ~/.config/shell/env.sh
+[[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
+[[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
+
+# Fix NVM hook PATH issues before any hooks run
+fix_nvm_hook_path
+
+# Source private configuration (contains sensitive data like API keys, tokens)
+[[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh
+
+# Only load aliases in interactive shells (they can cause issues in scripts)
+# Also ensure we're in an interactive shell before loading aliases
+if [[ -n "$PS1" ]] && [[ -n "$ZSH_VERSION" ]]; then
+    [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
+fi 
+. "$HOME/.cargo/env"
