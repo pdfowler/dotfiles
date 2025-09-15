@@ -39,15 +39,69 @@ create_symlink() {
     echo -e "${GREEN}✓ Linked $source -> $target${NC}"
 }
 
-# Create symlinks for shell configs
-echo -e "${YELLOW}Creating shell configuration symlinks...${NC}"
+install_packages() {
+    echo -e "${YELLOW}Installing packages...${NC}"
+    local has_cursor_cli=""
+    if command -v cursor-agent >/dev/null 2>&1; then
+        has_cursor_cli="$(which cursor-agent)"
+    fi
+
+    if [[ ! $has_cursor_cli ]]; then
+        echo -e "${YELLOW}Installing cursor-agent...${NC}"
+        curl https://cursor.com/install -fsS | bash > /dev/null 2>&1
+    else 
+        echo -e "${YELLOW}Updating cursor-agent...${NC}"
+        cursor-agent update > /dev/null 2>&1
+    fi
+
+    # install setuptools to avoid nodegyp/unixdgram errors
+    if ! command -v pip3 >/dev/null 2>&1; then
+        echo -e "${YELLOW}Installing pip3...${NC}"
+        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+        python3 get-pip.py
+        rm get-pip.py
+    fi
+
+    # Check if setuptools is available (it's a Python package, not a command)
+    if ! python3 -c "import setuptools" 2>/dev/null; then
+        echo -e "${YELLOW}Installing setuptools...${NC}"
+        # Temporarily disable virtualenv requirement for this installation
+        PIP_REQUIRE_VIRTUALENV=false pip3 install setuptools
+    fi
+
+    # Set up global virtual environment for tools like uv/uvx
+    echo -e "${YELLOW}Setting up global virtual environment...${NC}"
+    if [[ -f "$DOTFILES_DIR/config/shell/aliases.sh" ]]; then
+        # Source the aliases to get the create_global_venv function
+        source "$DOTFILES_DIR/config/shell/aliases.sh"
+        create_global_venv
+        echo -e "${GREEN}✓ Global virtual environment setup complete${NC}"
+    else
+        echo -e "${YELLOW}Warning: aliases.sh not found, skipping global venv setup${NC}"
+    fi
+
+    # Install Rust/Cargo, git-stack, and configure system
+    echo -e "${YELLOW}Setting up development tools and system configuration...${NC}"
+    if [[ -f "$DOTFILES_DIR/config/shell/software.sh" ]]; then
+        # Source the software functions
+        source "$DOTFILES_DIR/config/shell/software.sh"
+        setup_system_auto
+        echo -e "${GREEN}✓ Development tools and system configuration complete${NC}"
+    else
+        echo -e "${YELLOW}Warning: software.sh not found, skipping development tools setup${NC}"
+    fi
+}
+
+# Create symlinks for cross-shell compatible configs
+echo -e "${YELLOW}Creating cross-shell configuration symlinks...${NC}"
 create_symlink "$DOTFILES_DIR/config/shell/env.sh" "$HOME/.config/shell/env.sh"
 create_symlink "$DOTFILES_DIR/config/shell/paths.sh" "$HOME/.config/shell/paths.sh"
 create_symlink "$DOTFILES_DIR/config/shell/aliases.sh" "$HOME/.config/shell/aliases.sh"
+create_symlink "$DOTFILES_DIR/config/shell/software.sh" "$HOME/.config/shell/software.sh"
 
 # Create symlinks for shell-specific files
 echo -e "${YELLOW}Creating shell-specific configuration symlinks...${NC}"
-create_symlink "$DOTFILES_DIR/zshenv" "$HOME/.zshenv"
+create_symlink "$DOTFILES_DIR/config/shell/zshenv" "$HOME/.zshenv"
 create_symlink "$DOTFILES_DIR/config/shell/bashrc" "$HOME/.bashrc"
 
 # Optional: Create a private config file if it doesn't exist
@@ -64,10 +118,16 @@ EOF
     echo -e "${GREEN}✓ Created ~/.config/shell/private.sh${NC}"
 fi
 
+install_packages
+
 echo -e "${GREEN}✅ Dotfiles installation complete!${NC}"
 echo -e "${YELLOW}💡 Don't forget to:${NC}"
 echo "  1. Add sensitive data to ~/.config/shell/private.sh (all 'private' files are git ignored)"
 echo "  2. Run 'update' or restart this and other terminal sessions"
 if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
     echo "  3. Initialize git repo: cd $DOTFILES_DIR && git init"
-fi 
+fi
+
+echo -e "${YELLOW}🐍 Python Virtual Environment:${NC}"
+echo "  • Use 'gvenv' to activate global virtual environment for tools like uv/uvx"
+echo "  • Use 'gdeactivate' to deactivate the global virtual environment" 
