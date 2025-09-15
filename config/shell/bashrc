@@ -7,3 +7,4 @@
 
 # Only load aliases in interactive shells (they can cause issues in scripts)
 [[ -n "$PS1" ]] && [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh 
+. "$HOME/.cargo/env"
