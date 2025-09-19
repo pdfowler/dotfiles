@@ -370,6 +370,9 @@ setup_system_auto() {
     # Install git-sweep
     install_git_sweep
     
+    # Install MongoDB shell tools
+    install_mongosh
+    
     # Configure macOS Finder (only on macOS)
     if [[ "$OSTYPE" == "darwin"* ]]; then
         enable_finder_hidden_files
@@ -427,6 +430,112 @@ install_git_sweep() {
     fi
 }
 
+# MongoDB Shell Tools Management
+# These functions handle MongoDB shell tools installation and management
+
+# Check if mongosh is installed
+is_mongosh_installed() {
+    command -v mongosh >/dev/null 2>&1
+}
+
+# Get current mongosh version
+get_mongosh_version() {
+    if is_mongosh_installed; then
+        mongosh --version 2>/dev/null | head -n1 | sed 's/.*mongosh[[:space:]]*//' | sed 's/[[:space:]].*//' | head -n1
+    else
+        echo "not-installed"
+    fi
+}
+
+# Install mongosh via Homebrew
+install_mongosh() {
+    echo -e "${BLUE}Installing MongoDB Shell (mongosh)...${NC}"
+    
+    if is_mongosh_installed; then
+        echo -e "${GREEN}✓ mongosh is already installed${NC}"
+        return 0
+    fi
+    
+    # Check if Homebrew is available
+    if ! command -v brew >/dev/null 2>&1; then
+        echo -e "${RED}❌ Error: Homebrew is required but not found. Please install Homebrew first.${NC}"
+        return 1
+    fi
+    
+    # Install mongosh
+    echo -e "${YELLOW}Installing mongosh via Homebrew...${NC}"
+    if brew install mongosh; then
+        echo -e "${GREEN}✓ mongosh installed successfully${NC}"
+        echo -e "${YELLOW}💡 You can now use 'mongosh' to connect to MongoDB instances${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to install mongosh${NC}"
+        return 1
+    fi
+}
+
+# Upgrade mongosh to latest version
+upgrade_mongosh() {
+    echo -e "${BLUE}Upgrading mongosh...${NC}"
+    
+    if ! is_mongosh_installed; then
+        echo -e "${YELLOW}mongosh is not installed. Installing it first...${NC}"
+        return install_mongosh
+    fi
+    
+    # Check if Homebrew is available
+    if ! command -v brew >/dev/null 2>&1; then
+        echo -e "${RED}❌ Error: Homebrew is required but not found. Please install Homebrew first.${NC}"
+        return 1
+    fi
+    
+    # Upgrade mongosh
+    echo -e "${YELLOW}Upgrading mongosh via Homebrew...${NC}"
+    if brew upgrade mongosh; then
+        echo -e "${GREEN}✓ mongosh upgraded successfully${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to upgrade mongosh${NC}"
+        return 1
+    fi
+}
+
+# Check and upgrade mongosh on demand
+check_upgrade_mongosh() {
+    echo -e "${BLUE}Checking mongosh status...${NC}"
+    
+    if ! is_mongosh_installed; then
+        echo -e "${YELLOW}mongosh is not installed.${NC}"
+        read -p "Would you like to install it? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            install_mongosh
+        else
+            echo -e "${YELLOW}Installation cancelled.${NC}"
+        fi
+        return
+    fi
+    
+    local current_version
+    current_version=$(get_mongosh_version)
+    
+    echo -e "${YELLOW}Current version: $current_version${NC}"
+    
+    # Check if upgrade is available
+    if brew outdated mongosh >/dev/null 2>&1; then
+        echo -e "${YELLOW}A newer version is available.${NC}"
+        read -p "Would you like to upgrade? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            upgrade_mongosh
+        else
+            echo -e "${YELLOW}Upgrade cancelled.${NC}"
+        fi
+    else
+        echo -e "${GREEN}✓ mongosh is up to date${NC}"
+    fi
+}
+
 # NX Monorepo Tool Management
 # Simple alias approach - follows Shiftsmart's pattern of using local nx versions
 
@@ -457,5 +566,8 @@ alias git-stack-check='check_upgrade_git_stack'
 alias rust-install='install_rust'
 alias git-stack-install='install_git_stack'
 alias git-sweep-install='install_git_sweep'
+alias mongosh-install='install_mongosh'
+alias mongosh-upgrade='upgrade_mongosh'
+alias mongosh-check='check_upgrade_mongosh'
 alias show-hidden-files='enable_finder_hidden_files'
 alias system-setup='setup_system_auto'
