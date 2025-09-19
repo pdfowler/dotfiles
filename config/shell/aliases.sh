@@ -75,6 +75,10 @@ custom_cd() {
         local path="$HOME/Development/$sub"
         [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @dev/* case - sub: $sub, path: $path"
         ;;
+      @dotfiles)
+        local path="$SHIFTSMART_ROOT/dotfiles"
+        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @dotfiles case - path: $path"
+        ;;
       @shiftsmart)
         local path="$SHIFTSMART_ROOT"
         [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @shiftsmart case - path: $path"
