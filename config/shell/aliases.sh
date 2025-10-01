@@ -59,72 +59,72 @@ update() {
 # Aliases for Shiftsmart Repos
 custom_cd() {
   # Only show debug output if DEBUG_CD is set
-  [[ -n "$DEBUG_CD" ]] && echo "DEBUG: cd() called with args: $@"
-  [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Current PATH: $PATH"
-  [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Current PWD: $PWD"
+  [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: cd() called with args: $@"
+  [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: Current PATH: $PATH"
+  [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: Current PWD: $PWD"
   
   if [[ "$1" == @* ]]; then
-    [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Matched @ pattern: $1"
+    [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: Matched @ pattern: $1"
     case "$1" in
       @dev)
         local path="$HOME/Development"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @dev case - path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @dev case - path: $path"
         ;;
       @dev/*)
         local sub="${1#@dev/}"
         local path="$HOME/Development/$sub"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @dev/* case - sub: $sub, path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @dev/* case - sub: $sub, path: $path"
         ;;
       @dotfiles)
         local path="$SHIFTSMART_ROOT/dotfiles"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @dotfiles case - path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @dotfiles case - path: $path"
         ;;
       @shiftsmart)
         local path="$SHIFTSMART_ROOT"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @shiftsmart case - path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @shiftsmart case - path: $path"
         ;;
       @ssm/*)
         local sub="${1#@ssm/}"
         local path="$SHIFTSMART_ROOT/services/ssm/packages/$sub"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @ssm/* case - sub: $sub, path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @ssm/* case - sub: $sub, path: $path"
         ;;
       @monorepo/packages/*)
         local sub="${1#@monorepo/packages/}"
         local path="$SHIFTSMART_ROOT/services/monorepo/packages/$sub"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @monorepo/packages/* case - sub: $sub, path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @monorepo/packages/* case - sub: $sub, path: $path"
         ;;
       @monorepo/applications/*)
         local sub="${1#@monorepo/applications/}"
         local path="$SHIFTSMART_ROOT/services/monorepo/applications/$sub"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @monorepo/applications/* case - sub: $sub, path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @monorepo/applications/* case - sub: $sub, path: $path"
         ;;
       @monorepo/*)
         local sub="${1#@monorepo/}"
         local path="$SHIFTSMART_ROOT/services/monorepo/packages/$sub"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @monorepo/* case - sub: $sub, path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @monorepo/* case - sub: $sub, path: $path"
         ;;
       @*)
         local dir="${1#@}"
         local path="$SHIFTSMART_ROOT/services/$dir"
-        [[ -n "$DEBUG_CD" ]] && echo "DEBUG: @* case - dir: $dir, path: $path"
+        [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: @* case - dir: $dir, path: $path"
         ;;
     esac
     if [[ -d "$path" ]]; then
-      [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Directory exists, changing to: $path"
+      [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: Directory exists, changing to: $path"
       builtin cd "$path"
       # if [[ -n "$chpwd_functions" ]]; then
       #   for chpwd_hook in "${chpwd_functions[@]}"; do
       #     "$chpwd_hook"
       #   done
       # fi
-      [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Changed to: $(pwd)"
+      [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: Changed to: $(pwd)"
     else
-      [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Directory not found: $path"
+      [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: Directory not found: $path"
       return 1
     fi
     return
   fi
-  [[ -n "$DEBUG_CD" ]] && echo "DEBUG: No @ pattern match, using builtin cd with: $@"
+  [[ -n "${DEBUG_CD:-}" ]] && echo "DEBUG: No @ pattern match, using builtin cd with: $@"
   builtin cd "$@"
   # if [[ -n "$chpwd_functions" ]]; then
   #   for chpwd_hook in "${chpwd_functions[@]}"; do
