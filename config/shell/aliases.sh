@@ -112,6 +112,11 @@ custom_cd() {
     if [[ -d "$path" ]]; then
       [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Directory exists, changing to: $path"
       builtin cd "$path"
+      # if [[ -n "$chpwd_functions" ]]; then
+      #   for chpwd_hook in "${chpwd_functions[@]}"; do
+      #     "$chpwd_hook"
+      #   done
+      # fi
       [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Changed to: $(pwd)"
     else
       [[ -n "$DEBUG_CD" ]] && echo "DEBUG: Directory not found: $path"
@@ -121,6 +126,11 @@ custom_cd() {
   fi
   [[ -n "$DEBUG_CD" ]] && echo "DEBUG: No @ pattern match, using builtin cd with: $@"
   builtin cd "$@"
+  # if [[ -n "$chpwd_functions" ]]; then
+  #   for chpwd_hook in "${chpwd_functions[@]}"; do
+  #     "$chpwd_hook"
+  #   done
+  # fi
 }
 
 # Find and kill process by name
@@ -207,6 +217,53 @@ fix_nvm_hook_path() {
     fi
 }
 
+# Fix NVM nounset issue - handles unset NVM_NO_USE variable
+fix_nvm_nounset() {
+    echo "Fixing NVM nounset issue..."
+    
+    # Create a wrapper for _zsh_nvm_load that handles unset variables
+    _zsh_nvm_load_wrapper() {
+        # Use default value syntax to handle unset NVM_NO_USE
+        if [[ "${NVM_NO_USE:-false}" == true ]]; then
+            source "$NVM_DIR/nvm.sh" --no-use
+        else
+            source "$NVM_DIR/nvm.sh"
+        fi
+        
+        # Call the original function if it exists
+        if declare -f _zsh_nvm_load >/dev/null 2>&1; then
+            # Unset the wrapper temporarily to avoid recursion
+            unset -f _zsh_nvm_load_wrapper
+            _zsh_nvm_load "$@"
+            # Re-set the wrapper
+            _zsh_nvm_load_wrapper() {
+                if [[ "${NVM_NO_USE:-false}" == true ]]; then
+                    source "$NVM_DIR/nvm.sh" --no-use
+                else
+                    source "$NVM_DIR/nvm.sh"
+                fi
+            }
+        fi
+    }
+    
+    # Replace the original function with our wrapper
+    if declare -f _zsh_nvm_load >/dev/null 2>&1; then
+        # Create an alias to the wrapper
+        alias _zsh_nvm_load='_zsh_nvm_load_wrapper'
+        echo "✓ NVM nounset issue fixed - _zsh_nvm_load now handles unset variables"
+    else
+        echo "No _zsh_nvm_load function found to fix"
+    fi
+}
+
+# Comprehensive NVM fix that addresses both PATH and nounset issues
+fix_nvm_comprehensive() {
+    echo "Applying comprehensive NVM fixes..."
+    fix_nvm_hook_path
+    fix_nvm_nounset
+    echo "✓ All NVM issues fixed"
+}
+
 # Global Python Virtual Environment Management
 # These functions help manage a global virtual environment for tools like uv/uvx
 
@@ -283,4 +340,80 @@ install_uv() {
     echo "✓ uv (includes uvx) installed/updated"
     fi
 }
+
+# Node.js and NVM Management Aliases (following Shiftsmart best practices)
+# These aliases provide convenient access to Node.js management functions
+
+# Quick Node.js version management
+alias node-version='node --version'
+alias npm-version='npm --version'
+alias nvm-version='nvm --version'
+
+# NVM convenience aliases
+alias nvm-list='nvm list'
+alias nvm-current='nvm current'
+alias nvm-use='nvm use'
+alias nvm-install-lts='nvm install --lts'
+alias nvm-install-node='nvm install node'
+
+# Node.js project management (following Shiftsmart patterns)
+alias node-use='nvm use'  # Use .nvmrc version
+alias node-install-rc='nvm install'  # Install .nvmrc version
+
+# Quick setup aliases (these call the functions from software.sh)
+alias node-setup='setup_nodejs_environment'
+alias node-check-conflict='check_homebrew_node_conflict'
+
+# NVM fix aliases
+alias fix-nvm='fix_nvm_comprehensive'
+alias fix-nvm-path='fix_nvm_hook_path'
+alias fix-nvm-nounset='fix_nvm_nounset'
+
+# Development workflow aliases (inspired by Shiftsmart's approach)
+alias node-dev='nvm use && npm run dev'
+alias node-build='nvm use && npm run build'
+alias node-test='nvm use && npm test'
+alias node-install-deps='nvm use && npm install'
+
+# Package manager aliases (use project-specific versions)
+alias pnpm-dev='nvm use && pnpm dev'
+alias pnpm-build='nvm use && pnpm build'
+alias pnpm-test='nvm use && pnpm test'
+alias pnpm-install='nvm use && pnpm install'
+
+alias yarn-dev='nvm use && yarn dev'
+alias yarn-build='nvm use && yarn build'
+alias yarn-test='nvm use && yarn test'
+alias yarn-install='nvm use && yarn install'
+
+# Quick project setup (following Shiftsmart's monorepo patterns)
+setup_node_project() {
+    echo "Setting up Node.js project with NVM..."
+    
+    # Check if .nvmrc exists
+    if [[ -f ".nvmrc" ]]; then
+        echo "Found .nvmrc file, installing and using specified Node.js version..."
+        nvm install
+        nvm use
+    else
+        echo "No .nvmrc file found. Using current Node.js version..."
+        echo "Current Node.js version: $(node --version)"
+    fi
+    
+    # Install dependencies if package.json exists
+    if [[ -f "package.json" ]]; then
+        echo "Installing dependencies..."
+        if [[ -f "pnpm-lock.yaml" ]]; then
+            pnpm install
+        elif [[ -f "yarn.lock" ]]; then
+            yarn install
+        else
+            npm install
+        fi
+    fi
+    
+    echo "✓ Node.js project setup complete!"
+}
+
+alias node-project-setup='setup_node_project'
 
