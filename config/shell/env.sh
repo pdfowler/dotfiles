@@ -5,6 +5,18 @@
 export EDITOR="vi"
 export VISUAL="cursor"
 
+# Non-interactive editor for automated contexts (like git rebase in CI/agents)
+# This prevents hanging when git needs to edit commit messages
+if [[ -n "$CI" ]] || [[ -n "$GITHUB_ACTIONS" ]] || [[ -n "$CURSOR_AGENT" ]]; then
+    # Use non-interactive editor for automated contexts
+    export EDITOR="cat"
+    export GIT_EDITOR="cat"
+    export GIT_SEQUENCE_EDITOR="sed -i '' 's/^pick/reword/'"
+else
+    # Use interactive editor for normal use
+    export GIT_EDITOR="${GIT_EDITOR:-vi}"
+fi
+
 # Development tools
 export HOMEBREW_NO_ENV_HINTS=true
 export PYENV_ROOT="$HOME/.pyenv"

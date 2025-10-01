@@ -38,6 +38,17 @@ settings() {
   esac
 }
 
+# Git helper functions for automated contexts
+git_rebase_no_edit() {
+    # Use non-interactive rebase to avoid editor hanging
+    EDITOR="cat" GIT_EDITOR="cat" git rebase "$@"
+}
+
+git_commit_no_edit() {
+    # Use non-interactive commit to avoid editor hanging
+    EDITOR="cat" GIT_EDITOR="cat" git commit "$@"
+}
+
 # Utility functions (cross-shell compatible)
 update() {
     case "$SHELL" in
