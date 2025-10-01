@@ -7,7 +7,7 @@ export VISUAL="cursor"
 
 # Automated context detection and configuration
 # This section optimizes shell behavior for CI, GitHub Actions, and Cursor Agent contexts
-if [[ -n "$CI" ]] || [[ -n "$GITHUB_ACTIONS" ]] || [[ -n "$CURSOR_AGENT" ]]; then
+if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]] || [[ -n "${CURSOR_AGENT:-}" ]]; then
     # Automated context: disable oh-my-zsh for performance and reliability
     export DISABLE_OH_MY_ZSH=true
     
