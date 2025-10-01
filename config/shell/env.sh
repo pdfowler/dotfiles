@@ -5,17 +5,31 @@
 export EDITOR="vi"
 export VISUAL="cursor"
 
-# Non-interactive editor for automated contexts (like git rebase in CI/agents)
-# This prevents hanging when git needs to edit commit messages
+# Automated context detection and configuration
+# This section optimizes shell behavior for CI, GitHub Actions, and Cursor Agent contexts
 if [[ -n "$CI" ]] || [[ -n "$GITHUB_ACTIONS" ]] || [[ -n "$CURSOR_AGENT" ]]; then
+    # Automated context: disable oh-my-zsh for performance and reliability
+    export DISABLE_OH_MY_ZSH=true
+    
     # Use non-interactive editor for automated contexts
     export EDITOR="cat"
     export GIT_EDITOR="cat"
     export GIT_SEQUENCE_EDITOR="sed -i '' 's/^pick/reword/'"
+    
+    # Disable interactive features
+    export DISABLE_AUTO_UPDATE=true
+    export DISABLE_UPDATE_PROMPT=true
 else
-    # Use interactive editor for normal use
+    # Interactive context: use normal configuration
     export GIT_EDITOR="${GIT_EDITOR:-vi}"
 fi
+
+# Note: To use this in your .zshrc, add this conditional loading:
+# if [[ -z "$DISABLE_OH_MY_ZSH" ]]; then
+#     # Load oh-my-zsh only for interactive shells
+#     export ZSH="$HOME/.oh-my-zsh"
+#     source "$ZSH/oh-my-zsh.sh"
+# fi
 
 # Development tools
 export HOMEBREW_NO_ENV_HINTS=true
