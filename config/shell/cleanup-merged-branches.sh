@@ -127,20 +127,39 @@ for branch in $LOCAL_BRANCHES; do
     fi
     
     # Check if branch has a merged PR
-    if gh pr list --head "$branch" --state merged --json number --jq '.[].number' >/dev/null 2>&1; then
+    merged_prs=$(gh pr list --head "$branch" --state merged --json number --jq '.[].number' 2>/dev/null)
+    if [[ -n "$merged_prs" ]]; then
         MERGED_BRANCHES+=("$branch")
         if [[ "$VERBOSE" == "true" ]]; then
             echo -e "${GREEN}✓ merged${NC}"
         fi
-    elif [[ "$INCLUDE_CLOSED" == "true" ]] && gh pr list --head "$branch" --state closed --json number --jq '.[].number' >/dev/null 2>&1; then
+    elif [[ "$INCLUDE_CLOSED" == "true" ]]; then
         # Check if branch has a closed (unmerged) PR
-        CLOSED_BRANCHES+=("$branch")
-        if [[ "$VERBOSE" == "true" ]]; then
-            echo -e "${YELLOW}⚠️  closed${NC}"
+        closed_prs=$(gh pr list --head "$branch" --state closed --json number --jq '.[].number' 2>/dev/null)
+        if [[ -n "$closed_prs" ]]; then
+            CLOSED_BRANCHES+=("$branch")
+            if [[ "$VERBOSE" == "true" ]]; then
+                echo -e "${YELLOW}⚠️  closed${NC}"
+            fi
+        else
+            # Check if branch has any PR at all (to distinguish between no PR and not merged/closed)
+            any_prs=$(gh pr list --head "$branch" --json number --jq '.[].number' 2>/dev/null)
+            if [[ -n "$any_prs" ]]; then
+                NOT_MERGED_BRANCHES+=("$branch")
+                if [[ "$VERBOSE" == "true" ]]; then
+                    echo -e "${YELLOW}⚠️  has PR but not merged${NC}"
+                fi
+            else
+                NOT_MERGED_BRANCHES+=("$branch")
+                if [[ "$VERBOSE" == "true" ]]; then
+                    echo -e "${YELLOW}⚠️  no PR found${NC}"
+                fi
+            fi
         fi
     else
         # Check if branch has any PR at all (to distinguish between no PR and not merged/closed)
-        if gh pr list --head "$branch" --json number --jq '.[].number' >/dev/null 2>&1; then
+        any_prs=$(gh pr list --head "$branch" --json number --jq '.[].number' 2>/dev/null)
+        if [[ -n "$any_prs" ]]; then
             NOT_MERGED_BRANCHES+=("$branch")
             if [[ "$VERBOSE" == "true" ]]; then
                 echo -e "${YELLOW}⚠️  has PR but not merged${NC}"
