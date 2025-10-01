@@ -22,8 +22,10 @@ export PIP_DOWNLOAD_CACHE="$HOME/.pip/cache"
 export GIT_EDITOR="$EDITOR"
 
 # Oh-my-zsh configuration
-# Set ZSH_CUSTOM to prevent "parameter not set" errors when nounset is enabled
+# Set oh-my-zsh variables to prevent "parameter not set" errors when nounset is enabled
+export ZSH="${ZSH:-$HOME/.oh-my-zsh}"
 export ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+export ZSH_CACHE_DIR="${ZSH_CACHE_DIR:-$HOME/.oh-my-zsh/cache}"
 
 # Terminal colors
 export CLICOLOR=1
