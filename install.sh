@@ -128,10 +128,7 @@ install_packages
 
 # Setup git aliases for branch cleanup
 echo -e "${YELLOW}Setting up git aliases...${NC}"
-git config --global alias.prune-merged '!$HOME/.config/shell/cleanup-merged-branches.sh'
-git config --global alias.prune-merged-list '!$HOME/.config/shell/cleanup-merged-branches.sh --list'
-git config --global alias.prune-merged-closed '!$HOME/.config/shell/cleanup-merged-branches.sh --closed'
-git config --global alias.prune-merged-all '!$HOME/.config/shell/cleanup-merged-branches.sh --closed --list'
+git config --global alias.prune-local '!$HOME/.config/shell/cleanup-merged-branches.sh'
 echo -e "${GREEN}✓ Git aliases configured${NC}"
 
 echo -e "${GREEN}✅ Dotfiles installation complete!${NC}"
@@ -147,7 +144,7 @@ echo "  • Use 'gvenv' to activate global virtual environment for tools like uv
 echo "  • Use 'gdeactivate' to deactivate the global virtual environment"
 echo ""
 echo -e "${YELLOW}🔧 Git Branch Cleanup:${NC}"
-echo "  • Use 'git prune-merged' to delete branches with merged PRs"
-echo "  • Use 'git prune-merged-list' to preview what would be deleted"
-echo "  • Use 'git prune-merged-closed' to include closed PRs"
-echo "  • Use 'git prune-merged-all' to preview all (merged + closed)" 
+echo "  • Use 'git prune-local' to delete branches with merged PRs"
+echo "  • Use 'git prune-local --list' to preview what would be deleted"
+echo "  • Use 'git prune-local --closed' to include closed PRs"
+echo "  • Use 'git prune-local --closed --list' to preview all" 
