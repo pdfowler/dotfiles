@@ -56,17 +56,25 @@ if [[ -d "$HOME/.local/bin" ]]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Node.js and npm global packages - only load if core utilities are available
-# Only load NVM in interactive shells to avoid issues with scripts
-if [[ -d "$HOME/.nvm" ]] && [[ -n "$PS1" ]]; then
+# Node.js and NVM setup (following Shiftsmart best practices)
+# Only load NVM if core utilities are available and NVM is properly installed
+if [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]; then
     # Clean up any existing NVM paths first
     clean_nvm_path
     
     # Ensure core utilities are available before loading NVM
     export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
     
-    # Try to load NVM safely
-    safe_load_nvm
+    # Load NVM safely (following Shiftsmart's approach)
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+    
+    # Auto-switch to .nvmrc version if available (following Shiftsmart's emphasis on auto-switching)
+    # This is critical for project-specific Node.js versions
+    if [[ -f ".nvmrc" ]] && command -v nvm >/dev/null 2>&1; then
+        nvm use >/dev/null 2>&1 || true  # Silently fail if version not installed
+    fi
 fi
 
 # Python/pyenv setup
@@ -84,6 +92,15 @@ fi
 # Google Cloud completion (interactive shells only)
 if [[ -n "$PS1" ]] && [[ -f '/Users/pdfowler/Downloads/google-cloud-sdk/completion.zsh.inc' ]]; then
     source '/Users/pdfowler/Downloads/google-cloud-sdk/completion.zsh.inc'
+fi
+
+# Load bash-completion (works for both bash and zsh)
+if [[ -n "$PS1" ]]; then
+    # bash-completion is automatically loaded by oh-my-zsh in zsh
+    # For bash, we can load it manually if needed
+    if [[ -n "$BASH_VERSION" ]] && [[ -f "$(brew --prefix)/etc/bash_completion" ]]; then
+        source "$(brew --prefix)/etc/bash_completion"
+    fi
 fi
 
 # Rust/Cargo binaries

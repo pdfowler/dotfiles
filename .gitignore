@@ -1,2 +1,5 @@
 HOME_CONFIG/*
 *private*
+
+# Note: Completions are now handled by bash-completion system
+# Files are stored in $(brew --prefix)/etc/bash_completion.d/

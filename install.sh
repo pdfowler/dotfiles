@@ -87,6 +87,11 @@ install_packages() {
         source "$DOTFILES_DIR/config/shell/software.sh"
         setup_system_auto
         echo -e "${GREEN}✓ Development tools and system configuration complete${NC}"
+        
+        # Setup shell completions
+        echo -e "${YELLOW}Setting up shell completions...${NC}"
+        setup_completions
+        echo -e "${GREEN}✓ Shell completions setup complete${NC}"
     else
         echo -e "${YELLOW}Warning: software.sh not found, skipping development tools setup${NC}"
     fi

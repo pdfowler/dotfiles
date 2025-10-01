@@ -367,6 +367,9 @@ setup_system_auto() {
     # Setup Rust and git-stack
     setup_rust_and_git_stack_auto
     
+    # Setup Node.js environment with NVM (following Shiftsmart best practices)
+    setup_nodejs_environment_auto
+    
     # Install git-sweep
     install_git_sweep
     
@@ -536,6 +539,257 @@ check_upgrade_mongosh() {
     fi
 }
 
+# Node.js and NVM Management
+# These functions handle Node.js installation and management using NVM (following Shiftsmart best practices)
+
+# Check if NVM is installed
+is_nvm_installed() {
+    [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]
+}
+
+# Check if Node.js is installed via NVM
+is_node_installed_via_nvm() {
+    if is_nvm_installed; then
+        # Source NVM to check if Node.js is installed
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        command -v node >/dev/null 2>&1 && [[ "$(which node)" == *".nvm"* ]]
+    else
+        return 1
+    fi
+}
+
+# Check if Node.js is installed via Homebrew (problematic)
+is_node_installed_via_homebrew() {
+    command -v node >/dev/null 2>&1 && [[ "$(which node)" == *"homebrew"* ]]
+}
+
+# Get current Node.js version
+get_node_version() {
+    if command -v node >/dev/null 2>&1; then
+        node --version 2>/dev/null | sed 's/v//'
+    else
+        echo "not-installed"
+    fi
+}
+
+# Get current NVM version
+get_nvm_version() {
+    if is_nvm_installed; then
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        nvm --version 2>/dev/null | head -n1
+    else
+        echo "not-installed"
+    fi
+}
+
+# Install NVM via Homebrew (following Shiftsmart pattern)
+install_nvm() {
+    echo -e "${BLUE}Installing NVM (Node Version Manager)...${NC}"
+    
+    if is_nvm_installed; then
+        echo -e "${GREEN}✓ NVM is already installed${NC}"
+        return 0
+    fi
+    
+    # Check if Homebrew is available
+    if ! command -v brew >/dev/null 2>&1; then
+        echo -e "${RED}❌ Error: Homebrew is required but not found. Please install Homebrew first.${NC}"
+        return 1
+    fi
+    
+    # Install NVM via Homebrew (following Shiftsmart's approach)
+    echo -e "${YELLOW}Installing NVM via Homebrew...${NC}"
+    if brew install nvm; then
+        echo -e "${GREEN}✓ NVM installed successfully${NC}"
+        
+        # Create NVM directory if it doesn't exist
+        if [[ ! -d "$HOME/.nvm" ]]; then
+            mkdir -p "$HOME/.nvm"
+            echo -e "${GREEN}✓ Created NVM directory${NC}"
+        fi
+        
+        # Source NVM for current session
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        
+        echo -e "${YELLOW}💡 NVM installed. You may need to restart your shell or run 'source ~/.zshrc'${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to install NVM${NC}"
+        return 1
+    fi
+}
+
+# Install Node.js via NVM (recommended version)
+install_node_via_nvm() {
+    echo -e "${BLUE}Installing Node.js via NVM...${NC}"
+    
+    # Ensure NVM is installed first
+    if ! is_nvm_installed; then
+        echo -e "${YELLOW}NVM not found. Installing it first...${NC}"
+        if ! install_nvm; then
+            echo -e "${RED}❌ Error: Failed to install NVM. Cannot install Node.js.${NC}"
+            return 1
+        fi
+    fi
+    
+    # Source NVM
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    
+    # Install Node.js LTS (following Shiftsmart's pattern of using stable versions)
+    echo -e "${YELLOW}Installing Node.js LTS via NVM...${NC}"
+    if nvm install --lts; then
+        echo -e "${GREEN}✓ Node.js LTS installed successfully${NC}"
+        
+        # Set as default
+        nvm alias default lts/*
+        echo -e "${GREEN}✓ Node.js LTS set as default${NC}"
+        
+        # Show version
+        local node_version
+        node_version=$(get_node_version)
+        echo -e "${YELLOW}Installed Node.js version: $node_version${NC}"
+        
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to install Node.js via NVM${NC}"
+        return 1
+    fi
+}
+
+# Install specific Node.js version via NVM
+install_node_version() {
+    local version="$1"
+    
+    if [[ -z "$version" ]]; then
+        echo -e "${RED}❌ Usage: install_node_version <version>${NC}"
+        echo -e "${YELLOW}Example: install_node_version 22${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Installing Node.js version $version via NVM...${NC}"
+    
+    # Ensure NVM is installed first
+    if ! is_nvm_installed; then
+        echo -e "${YELLOW}NVM not found. Installing it first...${NC}"
+        if ! install_nvm; then
+            echo -e "${RED}❌ Error: Failed to install NVM. Cannot install Node.js.${NC}"
+            return 1
+        fi
+    fi
+    
+    # Source NVM
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    
+    # Install specific version
+    echo -e "${YELLOW}Installing Node.js version $version via NVM...${NC}"
+    if nvm install "$version"; then
+        echo -e "${GREEN}✓ Node.js version $version installed successfully${NC}"
+        
+        # Use this version
+        nvm use "$version"
+        echo -e "${GREEN}✓ Switched to Node.js version $version${NC}"
+        
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to install Node.js version $version${NC}"
+        return 1
+    fi
+}
+
+# Check for Homebrew-installed Node.js and warn
+check_homebrew_node_conflict() {
+    if is_node_installed_via_homebrew; then
+        echo -e "${YELLOW}⚠️  Warning: Node.js is installed via Homebrew${NC}"
+        echo -e "${YELLOW}   This can cause conflicts with NVM-managed Node.js versions${NC}"
+        echo -e "${YELLOW}   Consider uninstalling: brew uninstall node${NC}"
+        echo -e "${YELLOW}   Then use NVM for Node.js management instead${NC}"
+        return 1
+    else
+        echo -e "${GREEN}✓ No Homebrew Node.js conflicts detected${NC}"
+        return 0
+    fi
+}
+
+# Setup Node.js environment (following Shiftsmart best practices)
+setup_nodejs_environment() {
+    echo -e "${BLUE}Setting up Node.js environment with NVM...${NC}"
+    
+    # Check for conflicts first
+    check_homebrew_node_conflict
+    
+    # Install NVM if not present
+    if ! is_nvm_installed; then
+        echo -e "${YELLOW}Installing NVM...${NC}"
+        if ! install_nvm; then
+            echo -e "${RED}❌ Error: Failed to install NVM${NC}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ NVM is already installed${NC}"
+    fi
+    
+    # Install Node.js LTS if not present
+    if ! is_node_installed_via_nvm; then
+        echo -e "${YELLOW}Installing Node.js LTS via NVM...${NC}"
+        if ! install_node_via_nvm; then
+            echo -e "${RED}❌ Error: Failed to install Node.js via NVM${NC}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ Node.js is already installed via NVM${NC}"
+    fi
+    
+    # Show current status
+    local node_version
+    local nvm_version
+    node_version=$(get_node_version)
+    nvm_version=$(get_nvm_version)
+    
+    echo -e "${GREEN}✅ Node.js environment setup complete!${NC}"
+    echo -e "${YELLOW}💡 Current versions:${NC}"
+    echo "   - Node.js: $node_version"
+    echo "   - NVM: $nvm_version"
+    echo -e "${YELLOW}💡 You can now use:${NC}"
+    echo "   - 'nvm list' to see installed versions"
+    echo "   - 'nvm install <version>' to install specific versions"
+    echo "   - 'nvm use <version>' to switch versions"
+    echo "   - 'nvm current' to see current version"
+}
+
+# Auto-setup Node.js environment (non-interactive)
+setup_nodejs_environment_auto() {
+    echo -e "${BLUE}Automatically setting up Node.js environment with NVM...${NC}"
+    
+    # Install NVM if not present
+    if ! is_nvm_installed; then
+        echo -e "${YELLOW}Installing NVM...${NC}"
+        if ! install_nvm; then
+            echo -e "${RED}❌ Error: Failed to install NVM${NC}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ NVM is already installed${NC}"
+    fi
+    
+    # Install Node.js LTS if not present
+    if ! is_node_installed_via_nvm; then
+        echo -e "${YELLOW}Installing Node.js LTS via NVM...${NC}"
+        if ! install_node_via_nvm; then
+            echo -e "${RED}❌ Error: Failed to install Node.js via NVM${NC}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ Node.js is already installed via NVM${NC}"
+    fi
+    
+    echo -e "${GREEN}✅ Node.js environment setup complete!${NC}"
+}
+
 # NX Monorepo Tool Management
 # Simple alias approach - follows Shiftsmart's pattern of using local nx versions
 
@@ -559,6 +813,134 @@ enable_finder_hidden_files() {
     echo -e "${YELLOW}💡 To hide them again, run: defaults write com.apple.finder AppleShowAllFiles -bool false && killall Finder${NC}"
 }
 
+# Shell Completion Management
+# These functions handle completion setup using bash-completion (works for both bash and zsh)
+
+# Check if bash-completion is installed
+is_bash_completion_installed() {
+    [[ -d "$(brew --prefix)/etc/bash_completion.d" ]] 2>/dev/null
+}
+
+# Setup completions using bash-completion system
+setup_completions() {
+    echo -e "${BLUE}Setting up shell completions...${NC}"
+    
+    # Check if bash-completion is available
+    if ! is_bash_completion_installed; then
+        echo -e "${YELLOW}Installing bash-completion...${NC}"
+        if brew install bash-completion; then
+            echo -e "${GREEN}✓ bash-completion installed${NC}"
+        else
+            echo -e "${RED}❌ Failed to install bash-completion${NC}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ bash-completion already installed${NC}"
+    fi
+    
+    # Setup kubectl completion
+    setup_kubectl_completion
+    
+    # Verify other tool completions
+    verify_completions
+    
+    echo -e "${GREEN}✓ Shell completions setup complete${NC}"
+}
+
+# Setup kubectl completion using bash-completion
+setup_kubectl_completion() {
+    if command -v kubectl >/dev/null 2>&1; then
+        echo -e "${YELLOW}Setting up kubectl completion...${NC}"
+        
+        local completion_file="$(brew --prefix)/etc/bash_completion.d/kubectl"
+        
+        # Check if kubectl completion is already set up
+        if [[ -f "$completion_file" ]]; then
+            echo -e "${GREEN}✓ kubectl completion already configured${NC}"
+        else
+            # Generate kubectl completion for bash-completion
+            if kubectl completion bash > "$completion_file" 2>/dev/null; then
+                echo -e "${GREEN}✓ kubectl completion added to bash-completion${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Failed to generate kubectl completion${NC}"
+                rm -f "$completion_file"
+            fi
+        fi
+    else
+        echo -e "${YELLOW}⚠️  kubectl not found, skipping completion setup${NC}"
+    fi
+}
+
+# Verify that completions are working
+verify_completions() {
+    echo -e "${YELLOW}Verifying completions...${NC}"
+    
+    local bash_completion_dir="$(brew --prefix)/etc/bash_completion.d"
+    local completion_count=0
+    
+    # Count available completions
+    if [[ -d "$bash_completion_dir" ]]; then
+        completion_count=$(ls -1 "$bash_completion_dir" 2>/dev/null | wc -l)
+        echo -e "${GREEN}✓ Found $completion_count completion files in bash-completion${NC}"
+        
+        # List some key completions
+        echo -e "${BLUE}Available completions:${NC}"
+        ls -1 "$bash_completion_dir" | head -10 | sed 's/^/  - /'
+        if [[ $completion_count -gt 10 ]]; then
+            echo -e "  ... and $((completion_count - 10)) more"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  bash-completion directory not found${NC}"
+    fi
+}
+
+# Add completion for a tool that supports bash-completion
+add_completion() {
+    local tool_name="$1"
+    local completion_command="$2"
+    
+    if [[ -z "$tool_name" || -z "$completion_command" ]]; then
+        echo -e "${RED}❌ Usage: add_completion <tool_name> <completion_command>${NC}"
+        echo -e "${YELLOW}Example: add_completion kubectl 'kubectl completion bash'${NC}"
+        return 1
+    fi
+    
+    if command -v "$tool_name" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Adding $tool_name completion...${NC}"
+        
+        local completion_file="$(brew --prefix)/etc/bash_completion.d/$tool_name"
+        
+        if eval "$completion_command" > "$completion_file" 2>/dev/null; then
+            echo -e "${GREEN}✓ $tool_name completion added to bash-completion${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Failed to generate $tool_name completion${NC}"
+            rm -f "$completion_file"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  $tool_name not found, skipping completion setup${NC}"
+    fi
+}
+
+# Reload completions (useful after installing new tools)
+reload_completions() {
+    echo -e "${BLUE}Reloading shell completions...${NC}"
+    
+    # For bash-completion, we need to reload the bash-completion system
+    if [[ -n "$ZSH_VERSION" ]]; then
+        # In zsh, bash-completion is usually loaded via oh-my-zsh or manually
+        echo -e "${GREEN}✓ Completions will be available in new shell sessions${NC}"
+        echo -e "${YELLOW}💡 Run 'exec zsh' to reload completions in current session${NC}"
+    elif [[ -n "$BASH_VERSION" ]]; then
+        # In bash, we can reload bash-completion
+        if [[ -f "$(brew --prefix)/etc/bash_completion" ]]; then
+            source "$(brew --prefix)/etc/bash_completion"
+            echo -e "${GREEN}✓ bash-completion reloaded${NC}"
+        else
+            echo -e "${YELLOW}⚠️  bash-completion not found${NC}"
+        fi
+    fi
+}
+
 # Convenience aliases for software management
 alias rust-setup='setup_rust_and_git_stack'
 alias git-stack-upgrade='upgrade_git_stack'
@@ -571,3 +953,12 @@ alias mongosh-upgrade='upgrade_mongosh'
 alias mongosh-check='check_upgrade_mongosh'
 alias show-hidden-files='enable_finder_hidden_files'
 alias system-setup='setup_system_auto'
+alias completions-setup='setup_completions'
+alias completions-reload='reload_completions'
+
+# Node.js and NVM management aliases (following Shiftsmart best practices)
+alias node-setup='setup_nodejs_environment'
+alias nvm-install='install_nvm'
+alias node-install='install_node_via_nvm'
+alias node-install-version='install_node_version'
+alias node-check-conflict='check_homebrew_node_conflict'
