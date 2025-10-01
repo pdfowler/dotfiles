@@ -103,6 +103,7 @@ create_symlink "$DOTFILES_DIR/config/shell/env.sh" "$HOME/.config/shell/env.sh"
 create_symlink "$DOTFILES_DIR/config/shell/paths.sh" "$HOME/.config/shell/paths.sh"
 create_symlink "$DOTFILES_DIR/config/shell/aliases.sh" "$HOME/.config/shell/aliases.sh"
 create_symlink "$DOTFILES_DIR/config/shell/software.sh" "$HOME/.config/shell/software.sh"
+create_symlink "$DOTFILES_DIR/config/shell/cleanup-merged-branches.sh" "$HOME/.config/shell/cleanup-merged-branches.sh"
 
 # Create symlinks for shell-specific files
 echo -e "${YELLOW}Creating shell-specific configuration symlinks...${NC}"
@@ -125,6 +126,14 @@ fi
 
 install_packages
 
+# Setup git aliases for branch cleanup
+echo -e "${YELLOW}Setting up git aliases...${NC}"
+git config --global alias.prune-merged '!$HOME/.config/shell/cleanup-merged-branches.sh'
+git config --global alias.prune-merged-list '!$HOME/.config/shell/cleanup-merged-branches.sh --list'
+git config --global alias.prune-merged-closed '!$HOME/.config/shell/cleanup-merged-branches.sh --closed'
+git config --global alias.prune-merged-all '!$HOME/.config/shell/cleanup-merged-branches.sh --closed --list'
+echo -e "${GREEN}✓ Git aliases configured${NC}"
+
 echo -e "${GREEN}✅ Dotfiles installation complete!${NC}"
 echo -e "${YELLOW}💡 Don't forget to:${NC}"
 echo "  1. Add sensitive data to ~/.config/shell/private.sh (all 'private' files are git ignored)"
@@ -135,4 +144,10 @@ fi
 
 echo -e "${YELLOW}🐍 Python Virtual Environment:${NC}"
 echo "  • Use 'gvenv' to activate global virtual environment for tools like uv/uvx"
-echo "  • Use 'gdeactivate' to deactivate the global virtual environment" 
+echo "  • Use 'gdeactivate' to deactivate the global virtual environment"
+echo ""
+echo -e "${YELLOW}🔧 Git Branch Cleanup:${NC}"
+echo "  • Use 'git prune-merged' to delete branches with merged PRs"
+echo "  • Use 'git prune-merged-list' to preview what would be deleted"
+echo "  • Use 'git prune-merged-closed' to include closed PRs"
+echo "  • Use 'git prune-merged-all' to preview all (merged + closed)" 
