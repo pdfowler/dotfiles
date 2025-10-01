@@ -417,3 +417,10 @@ setup_node_project() {
 
 alias node-project-setup='setup_node_project'
 
+# Git branch cleanup aliases
+alias cleanup-branches='$HOME/.config/shell/cleanup-merged-branches.sh'
+alias cleanup-branches-list='$HOME/.config/shell/cleanup-merged-branches.sh --list'
+alias cleanup-branches-dry='$HOME/.config/shell/cleanup-merged-branches.sh --dry-run'
+alias cleanup-branches-closed='$HOME/.config/shell/cleanup-merged-branches.sh --closed'
+alias cleanup-branches-all='$HOME/.config/shell/cleanup-merged-branches.sh --closed --list'
+
