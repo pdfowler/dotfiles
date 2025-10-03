@@ -281,8 +281,23 @@ fix_nvm_nounset() {
     
     # Replace the original function with our wrapper
     if declare -f _zsh_nvm_load >/dev/null 2>&1; then
-        # Create an alias to the wrapper
-        alias _zsh_nvm_load='_zsh_nvm_load_wrapper'
+        # Store the original function
+        eval "_zsh_nvm_load_original() { $(declare -f _zsh_nvm_load | sed '1,2d;$d') }"
+        
+        # Create a function wrapper (not an alias) to avoid conflicts
+        _zsh_nvm_load() {
+            # Use default value syntax to handle unset NVM_NO_USE
+            if [[ "${NVM_NO_USE:-false}" == true ]]; then
+                source "$NVM_DIR/nvm.sh" --no-use
+            else
+                source "$NVM_DIR/nvm.sh"
+            fi
+            
+            # Call the original function if it exists
+            if declare -f _zsh_nvm_load_original >/dev/null 2>&1; then
+                _zsh_nvm_load_original "$@"
+            fi
+        }
         echo "✓ NVM nounset issue fixed - _zsh_nvm_load now handles unset variables"
     else
         echo "No _zsh_nvm_load function found to fix"
@@ -477,4 +492,15 @@ alias cleanup-branches-list='$HOME/.config/shell/cleanup-merged-branches.sh --li
 alias cleanup-branches-dry='$HOME/.config/shell/cleanup-merged-branches.sh --dry-run'
 alias cleanup-branches-closed='$HOME/.config/shell/cleanup-merged-branches.sh --closed'
 alias cleanup-branches-all='$HOME/.config/shell/cleanup-merged-branches.sh --closed --list'
+
+# Graphite stack sync function (replaces missing functionality in Charcoal)
+gt() {
+    if [[ "$1" == "stack" && "$2" == "sync" ]]; then
+        # Run the post-squash-merge cleanup script
+        "$HOME/Development/dotfiles/squash-merge-restack/restack.sh" "${@:3}"
+    else
+        # Pass through to actual gt command
+        command gt "$@"
+    fi
+}
 
