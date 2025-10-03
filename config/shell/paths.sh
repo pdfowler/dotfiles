@@ -75,6 +75,34 @@ if [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]; then
     if [[ -f ".nvmrc" ]] && command -v nvm >/dev/null 2>&1; then
         nvm use >/dev/null 2>&1 || true  # Silently fail if version not installed
     fi
+    
+    # Auto-fix NVM PATH corruption issues on startup
+    # This prevents "command not found: tr/tail/head/sed" errors
+    auto_fix_nvm_path() {
+        # Check if core utilities are missing
+        local missing_utils=()
+        for util in tr tail head sed; do
+            if ! command -v "$util" >/dev/null 2>&1; then
+                missing_utils+=("$util")
+            fi
+        done
+        
+        if [[ ${#missing_utils[@]} -gt 0 ]]; then
+            # Restore essential system paths that NVM might have removed
+            export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+            
+            # Clean up any duplicate or problematic NVM paths
+            export PATH=$(echo "$PATH" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | sed 's/:$//')
+            
+            # Ensure NVM paths are properly appended (not replacing system paths)
+            if [[ -n "${NVM_BIN:-}" ]] && [[ -d "$NVM_BIN" ]]; then
+                export PATH="$PATH:$NVM_BIN"
+            fi
+        fi
+    }
+    
+    # Run the auto-fix
+    auto_fix_nvm_path
 fi
 
 # Python/pyenv setup
