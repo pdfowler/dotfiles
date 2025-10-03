@@ -108,6 +108,7 @@ create_symlink "$DOTFILES_DIR/config/shell/cleanup-merged-branches.sh" "$HOME/.c
 # Create symlinks for shell-specific files
 echo -e "${YELLOW}Creating shell-specific configuration symlinks...${NC}"
 create_symlink "$DOTFILES_DIR/config/shell/zshenv" "$HOME/.zshenv"
+create_symlink "$DOTFILES_DIR/config/shell/zshrc" "$HOME/.zshrc"
 create_symlink "$DOTFILES_DIR/config/shell/bashrc" "$HOME/.bashrc"
 
 # Optional: Create a private config file if it doesn't exist
