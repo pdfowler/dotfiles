@@ -11,7 +11,7 @@ ZSH_THEME="robbyrussell"
 # Which plugins would you like to load?
 # Standard plugins can be found in $ZSH/plugins/
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
-plugins=(git zsh-nvm)
+plugins=(git)
 
 # Only load oh-my-zsh if not disabled (e.g., in Cursor Agent context)
 if [[ -z "$DISABLE_OH_MY_ZSH" ]]; then
