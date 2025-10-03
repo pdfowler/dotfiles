@@ -206,13 +206,16 @@ fix_nvm_path() {
 fix_nvm_hook_path() {
     echo "Fixing NVM hook PATH issues..."
     
+    # Ensure core utilities are always available
+    export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+    
     # Check if the hook exists
-    if [[ -n "$chpwd_functions" ]] && echo "$chpwd_functions" | grep -q "_zsh_nvm_auto_use"; then
+    if [[ -n "${chpwd_functions:-}" ]] && echo "${chpwd_functions[@]}" | grep -q "_zsh_nvm_auto_use"; then
         echo "Found NVM hook, creating PATH-safe wrapper..."
         
         # Create a wrapper function that ensures PATH is correct
         _zsh_nvm_auto_use_wrapper() {
-            # Ensure core utilities are available
+            # Ensure core utilities are available before any NVM operations
             export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
             
             # Now call the original function
@@ -225,6 +228,25 @@ fix_nvm_hook_path() {
         echo "✓ NVM hook PATH issues fixed while keeping auto-switching"
     else
         echo "No NVM hook found to fix"
+    fi
+    
+    # Also fix NVM functions that might be causing issues
+    if declare -f _zsh_nvm_nvm >/dev/null 2>&1; then
+        echo "Creating PATH-safe NVM function wrapper..."
+        
+        # Store the original function
+        eval "_zsh_nvm_nvm_original() { $(declare -f _zsh_nvm_nvm | sed '1,2d;$d') }"
+        
+        # Create a wrapper that ensures PATH is correct
+        _zsh_nvm_nvm() {
+            # Ensure core utilities are available
+            export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+            
+            # Call the original function
+            _zsh_nvm_nvm_original "$@"
+        }
+        
+        echo "✓ NVM function PATH issues fixed"
     fi
 }
 
@@ -267,9 +289,29 @@ fix_nvm_nounset() {
     fi
 }
 
+# Fix NVM PATH corruption - immediate fix for "command not found" errors
+fix_nvm_path_corruption() {
+    echo "Fixing NVM PATH corruption..."
+    
+    # Restore essential system paths that NVM might have removed
+    export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+    
+    # Clean up any duplicate or problematic NVM paths
+    export PATH=$(echo "$PATH" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | sed 's/:$//')
+    
+    # Ensure NVM paths are properly appended (not replacing system paths)
+    if [[ -n "${NVM_BIN:-}" ]] && [[ -d "$NVM_BIN" ]]; then
+        export PATH="$PATH:$NVM_BIN"
+    fi
+    
+    echo "✓ NVM PATH corruption fixed"
+    echo "Current PATH: $PATH"
+}
+
 # Comprehensive NVM fix that addresses both PATH and nounset issues
 fix_nvm_comprehensive() {
     echo "Applying comprehensive NVM fixes..."
+    fix_nvm_path_corruption
     fix_nvm_hook_path
     fix_nvm_nounset
     echo "✓ All NVM issues fixed"
@@ -379,6 +421,7 @@ alias node-check-conflict='check_homebrew_node_conflict'
 alias fix-nvm='fix_nvm_comprehensive'
 alias fix-nvm-path='fix_nvm_hook_path'
 alias fix-nvm-nounset='fix_nvm_nounset'
+alias fix-nvm-corruption='fix_nvm_path_corruption'
 
 # Development workflow aliases (inspired by Shiftsmart's approach)
 alias node-dev='nvm use && npm run dev'
