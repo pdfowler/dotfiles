@@ -281,21 +281,13 @@ fix_nvm_nounset() {
     
     # Replace the original function with our wrapper
     if declare -f _zsh_nvm_load >/dev/null 2>&1; then
-        # Store the original function
-        eval "_zsh_nvm_load_original() { $(declare -f _zsh_nvm_load | sed '1,2d;$d') }"
-        
-        # Create a function wrapper (not an alias) to avoid conflicts
+        # Create a function wrapper that handles unset variables
         _zsh_nvm_load() {
             # Use default value syntax to handle unset NVM_NO_USE
             if [[ "${NVM_NO_USE:-false}" == true ]]; then
                 source "$NVM_DIR/nvm.sh" --no-use
             else
                 source "$NVM_DIR/nvm.sh"
-            fi
-            
-            # Call the original function if it exists
-            if declare -f _zsh_nvm_load_original >/dev/null 2>&1; then
-                _zsh_nvm_load_original "$@"
             fi
         }
         echo "✓ NVM nounset issue fixed - _zsh_nvm_load now handles unset variables"
