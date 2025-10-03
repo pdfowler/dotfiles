@@ -256,6 +256,14 @@ remove_branch_from_stack() {
         if gt branch untrack "$branch_name"; then
             log_success "Successfully untracked branch $branch_name"
             
+            # Checkout another branch before deleting the local branch
+            local other_branch=$(gt log --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | grep -v "^$branch_name$" | head -1)
+            
+            if [ -n "$other_branch" ]; then
+                log_info "Checking out $other_branch before deleting $branch_name..."
+                gt branch checkout "$other_branch" 2>/dev/null || true
+            fi
+            
             # Delete the local branch
             if git branch -D "$branch_name"; then
                 log_success "Successfully deleted local branch $branch_name"
@@ -426,13 +434,12 @@ main_cleanup() {
         git rebase --abort 2>/dev/null || true
     fi
     
-    # Pull latest changes from origin/main first
-    log_info "Pulling latest changes from origin/main..."
-    if git pull --rebase origin main; then
-        log_success "Successfully pulled latest changes from origin/main"
+    # Fetch latest changes from origin/main (without merging)
+    log_info "Fetching latest changes from origin/main..."
+    if git fetch origin main; then
+        log_success "Successfully fetched latest changes from origin/main"
     else
-        log_warning "Failed to pull from origin/main, aborting rebase and continuing"
-        git rebase --abort 2>/dev/null || true
+        log_warning "Failed to fetch from origin/main, continuing anyway"
     fi
     
     # Navigate to bottom of stack
@@ -469,20 +476,50 @@ main_cleanup() {
     # Always clean up branches that are identical to main or empty
     cleanup_identical_branches
     
-    # Final restack
+    # Final restack - ensure we're on a tracked branch first
     log_info "Performing final restack..."
-    if gt stack restack; then
-        log_success "Successfully restacked"
+    
+    # Check if current branch is tracked, if not, checkout a tracked branch
+    if ! gt branch info > /dev/null 2>&1; then
+        log_info "Current branch is not tracked, finding a tracked branch to checkout..."
+        local tracked_branch=$(gt log --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | head -1)
+        
+        if [ -n "$tracked_branch" ]; then
+            log_info "Checking out tracked branch: $tracked_branch"
+            gt branch checkout "$tracked_branch" || log_warning "Failed to checkout tracked branch"
+        else
+            log_warning "No tracked branches found, skipping restack"
+        fi
+    fi
+    
+    # Now try restack if we're on a tracked branch
+    if gt branch info > /dev/null 2>&1; then
+        # Check if branches are behind main (likely to cause conflicts)
+        local current_branch=$(get_current_branch)
+        local main_sha=$(git rev-parse origin/main 2>/dev/null || git rev-parse main)
+        local branch_sha=$(git rev-parse "$current_branch")
+        
+        # If branch is not based on main, restack might cause conflicts
+        if ! git merge-base --is-ancestor "$main_sha" "$branch_sha" 2>/dev/null; then
+            log_warning "Branch $current_branch appears to be behind main, restack may cause conflicts"
+            log_info "Skipping restack to avoid conflicts. You can run 'gt stack restack' manually later if needed."
+        else
+            if gt stack restack; then
+                log_success "Successfully restacked"
+            else
+                log_warning "Restack failed - this may be due to merge conflicts"
+                log_info "You can resolve conflicts manually and run 'gt continue' to continue"
+                log_info "Or run 'gt rebase --abort' to cancel the rebase"
+                log_info "Continuing with sync operation..."
+            fi
+        fi
     else
-        log_warning "Restack failed - this may be due to merge conflicts"
-        log_info "You can resolve conflicts manually and run 'gt continue' to continue"
-        log_info "Or run 'gt rebase --abort' to cancel the rebase"
-        log_info "Continuing with sync operation..."
+        log_warning "Skipping restack - no tracked branch available"
     fi
     
     # Sync with main
     log_info "Syncing with main..."
-    if gt repo sync; then
+    if gt repo sync --no-interactive; then
         log_success "Successfully synced with main"
     else
         log_error "Failed to sync with main"
