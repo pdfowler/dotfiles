@@ -254,46 +254,10 @@ fix_nvm_hook_path() {
 fix_nvm_nounset() {
     echo "Fixing NVM nounset issue..."
     
-    # Create a wrapper for _zsh_nvm_load that handles unset variables
-    _zsh_nvm_load_wrapper() {
-        # Use default value syntax to handle unset NVM_NO_USE
-        if [[ "${NVM_NO_USE:-false}" == true ]]; then
-            source "$NVM_DIR/nvm.sh" --no-use
-        else
-            source "$NVM_DIR/nvm.sh"
-        fi
-        
-        # Call the original function if it exists
-        if declare -f _zsh_nvm_load >/dev/null 2>&1; then
-            # Unset the wrapper temporarily to avoid recursion
-            unset -f _zsh_nvm_load_wrapper
-            _zsh_nvm_load "$@"
-            # Re-set the wrapper
-            _zsh_nvm_load_wrapper() {
-                if [[ "${NVM_NO_USE:-false}" == true ]]; then
-                    source "$NVM_DIR/nvm.sh" --no-use
-                else
-                    source "$NVM_DIR/nvm.sh"
-                fi
-            }
-        fi
-    }
+    # Set NVM_NO_USE to prevent conflicts with zsh-nvm plugin
+    export NVM_NO_USE="${NVM_NO_USE:-false}"
     
-    # Replace the original function with our wrapper
-    if declare -f _zsh_nvm_load >/dev/null 2>&1; then
-        # Create a function wrapper that handles unset variables
-        _zsh_nvm_load() {
-            # Use default value syntax to handle unset NVM_NO_USE
-            if [[ "${NVM_NO_USE:-false}" == true ]]; then
-                source "$NVM_DIR/nvm.sh" --no-use
-            else
-                source "$NVM_DIR/nvm.sh"
-            fi
-        }
-        echo "✓ NVM nounset issue fixed - _zsh_nvm_load now handles unset variables"
-    else
-        echo "No _zsh_nvm_load function found to fix"
-    fi
+    echo "✓ NVM nounset issue fixed - NVM_NO_USE is now set"
 }
 
 # Fix NVM PATH corruption - immediate fix for "command not found" errors
