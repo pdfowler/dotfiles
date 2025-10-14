@@ -1,6 +1,23 @@
 #!/bin/bash
-# Post-Squash-Merge Cleanup Script
+# GT Stack Sync - Post-Squash-Merge Cleanup Script
 # Automates cleanup of stacked branches after multiple squash merges
+#
+# How it works:
+#   1. Scans ALL merge commits on main since your stack diverged
+#   2. For each merge, checks if you have that branch locally AND in your current stack
+#   3. Only processes branches that match both criteria
+#   4. Squashes and rebases matching branches onto their merge commits
+#   5. Cleans up branches that are now identical to main
+#   6. Restacks remaining branches
+#
+# Why it scans so many commits:
+#   The script needs to check every merge on main to see if any correspond to your
+#   local stack branches. Most will be skipped (no local branch or not in stack).
+#   This is normal and expected - don't worry about the "skipped" count.
+#
+# Fail-fast behavior:
+#   If ANY branch processing fails (e.g., merge conflicts), the script will STOP
+#   immediately to prevent cascading issues. Resolve conflicts and rerun.
 
 set -e
 
@@ -128,10 +145,8 @@ extract_pr_number() {
     local pr_number=$(echo "$commit_message" | grep -oE "(#[0-9]+|PR #[0-9]+|Merge pull request #[0-9]+)" | grep -oE "[0-9]+" | head -1)
     
     if [ -n "$pr_number" ]; then
-        log_info "Extracted PR number: $pr_number from commit $commit_sha"
         echo "$pr_number"
     else
-        log_warning "No PR number found in commit message for $commit_sha"
         return 1
     fi
 }
@@ -142,10 +157,8 @@ get_pr_head_branch() {
     local pr_head
     
     if pr_head=$(gh pr view "$pr_number" --json headRefName --jq '.headRefName' 2>/dev/null); then
-        log_info "PR #$pr_number head branch: $pr_head"
         echo "$pr_head"
     else
-        log_warning "Failed to get PR #$pr_number information from GitHub"
         return 1
     fi
 }
@@ -155,19 +168,18 @@ find_local_branch() {
     local remote_branch="$1"
     local local_branch
     
-    # Try exact match first
-    local_branch=$(git branch -vv | grep "origin/$remote_branch" | cut -d' ' -f2 | head -1)
+    # Try exact match first - use awk for robust parsing
+    # git branch -vv format: "* branch-name  commit-sha [origin/branch-name] msg"
+    local_branch=$(git branch -vv | grep "\[origin/$remote_branch\]" | awk '{if ($1 == "*") print $2; else print $1}' | head -1)
     
     # If no exact match, try partial match
     if [ -z "$local_branch" ]; then
-        local_branch=$(git branch -vv | grep "$remote_branch" | cut -d' ' -f2 | head -1)
+        local_branch=$(git branch -vv | grep "origin/$remote_branch" | awk '{if ($1 == "*") print $2; else print $1}' | head -1)
     fi
     
     if [ -n "$local_branch" ]; then
-        log_info "Found local branch: $local_branch tracking $remote_branch"
         echo "$local_branch"
     else
-        log_warning "No local branch found tracking $remote_branch"
         return 1
     fi
 }
@@ -180,10 +192,8 @@ is_branch_in_stack() {
     local stack_info=$(gt log --quiet 2>/dev/null || echo "")
     
     if echo "$stack_info" | grep -q "$branch_name"; then
-        log_info "Branch $branch_name is part of current stack"
         return 0
     else
-        log_warning "Branch $branch_name is not part of current stack"
         return 1
     fi
 }
@@ -336,34 +346,38 @@ process_merge_commit() {
     local commit_sha="$1"
     local commit_line="$2"
     
-    log_info "Processing merge commit: $commit_line"
+    # Note: No logging here - progress is shown by caller with inline updates
     
     # Extract PR number
     local pr_number
     if ! pr_number=$(extract_pr_number "$commit_sha"); then
-        log_warning "Skipping commit $commit_sha (no PR number found)"
+        # Silently skip - will be counted in summary
         return 0
     fi
     
     # Get PR head branch
     local pr_head
     if ! pr_head=$(get_pr_head_branch "$pr_number"); then
-        log_warning "Skipping PR #$pr_number (failed to get head branch)"
+        # Silently skip - will be counted in summary
         return 0
     fi
     
     # Find local branch
     local local_branch
     if ! local_branch=$(find_local_branch "$pr_head"); then
-        log_warning "Skipping PR #$pr_number (no local branch found)"
+        # Silently skip - will be counted in summary
         return 0
     fi
     
     # Check if branch is in current stack
     if ! is_branch_in_stack "$local_branch"; then
-        log_warning "Skipping branch $local_branch (not in current stack)"
+        # Silently skip - not in our stack
         return 0
     fi
+    
+    # If we get here, this branch is in our stack and needs processing
+    # Note: Caller will clear the progress line before we print
+    log_success "Found branch in current stack: $local_branch (PR #$pr_number)"
     
     # Switch to the branch
     log_info "Switching to branch: $local_branch"
@@ -455,22 +469,51 @@ main_cleanup() {
     if ! merge_commits=$(get_merge_commits "$merge_base"); then
         log_info "No merge commits to process."
     else
+        local total_commits=$(echo "$merge_commits" | wc -l | tr -d ' ')
+        log_info "Found $total_commits merge commits on origin/main since stack diverged"
+        log_info "Scanning to find which correspond to branches in current stack..."
+        echo "" # Blank line for the progress indicator
+        
         # Process each merge commit
         local processed_count=0
+        local checked_count=0
         while IFS= read -r commit_line; do
             if [ -z "$commit_line" ]; then
                 continue
             fi
             
             local commit_sha=$(echo "$commit_line" | cut -d' ' -f1)
+            ((checked_count++))
             
+            # Show progress on same line (will be cleared if branch is found)
+            printf "\r${BLUE}[SCAN]${NC} Checking merge commit %d/%d on origin/main...  " "$checked_count" "$total_commits"
+            
+            # FAIL-FAST: If processing fails, stop immediately
             if process_merge_commit "$commit_sha" "$commit_line"; then
+                # Clear the progress line before showing success message
+                printf "\r\033[K"
                 ((processed_count++))
+            else
+                local exit_code=$?
+                # Clear the progress line
+                printf "\r\033[K"
+                
+                if [ $exit_code -ne 0 ]; then
+                    # Non-zero return means actual failure
+                    log_error "Failed to process merge commit $commit_sha"
+                    log_error "Stopping to prevent further issues. Repository may be in an inconsistent state."
+                    log_info "To continue, resolve any conflicts and rerun this script."
+                    exit 1
+                fi
+                # If exit_code is 0, it was just skipped (no action needed)
             fi
             
         done <<< "$merge_commits"
         
-        log_success "Processed $processed_count merge commits"
+        # Clear the progress line and show final summary
+        printf "\r\033[K"
+        local skipped_count=$((total_commits - processed_count))
+        log_success "Scanned $total_commits merge commits on origin/main: processed $processed_count, skipped $skipped_count"
     fi
     
     # Always clean up branches that are identical to main or empty
