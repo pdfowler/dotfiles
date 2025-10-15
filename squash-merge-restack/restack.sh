@@ -111,24 +111,25 @@ find_merge_base() {
 }
 
 # Get merge commits on main since merge base
+# Note: We look for ALL commits (not just --merges) because squash-merge creates regular commits
 get_merge_commits() {
     local merge_base="$1"
     local merge_commits
     
-    # Try to get merge commits from origin/main
+    # Try to get commits from origin/main (squash merges are regular commits, not merge commits)
     if git rev-parse --verify origin/main > /dev/null 2>&1; then
-        merge_commits=$(git log --oneline --merges --reverse "$merge_base"..origin/main 2>/dev/null || echo "")
+        merge_commits=$(git log --oneline --reverse "$merge_base"..origin/main 2>/dev/null || echo "")
     else
         # Fallback to local main
-        merge_commits=$(git log --oneline --merges --reverse "$merge_base"..main 2>/dev/null || echo "")
+        merge_commits=$(git log --oneline --reverse "$merge_base"..main 2>/dev/null || echo "")
     fi
     
     if [ -z "$merge_commits" ]; then
-        log_warning "No merge commits found since merge base"
+        log_info "No commits found on main since merge base (stack is up to date)"
         return 1
     fi
     
-    log_info "Found merge commits:"
+    log_info "Found commits on main since merge base:"
     echo "$merge_commits" | while read -r commit; do
         log_info "  $commit"
     done
@@ -464,14 +465,14 @@ main_cleanup() {
     local merge_base
     merge_base=$(find_merge_base)
     
-    # Get merge commits
+    # Get commits on main (looking for squash-merged PRs)
     local merge_commits
     if ! merge_commits=$(get_merge_commits "$merge_base"); then
-        log_info "No merge commits to process."
+        log_info "No commits to process (stack is up to date with main)."
     else
         local total_commits=$(echo "$merge_commits" | wc -l | tr -d ' ')
-        log_info "Found $total_commits merge commits on origin/main since stack diverged"
-        log_info "Scanning to find which correspond to branches in current stack..."
+        log_info "Found $total_commits commits on origin/main since stack diverged"
+        log_info "Scanning for squash-merged PRs that match branches in current stack..."
         echo "" # Blank line for the progress indicator
         
         # Process each merge commit
