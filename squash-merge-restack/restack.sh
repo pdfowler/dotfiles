@@ -96,17 +96,17 @@ get_current_branch() {
 
 # Navigate to bottom of stack
 navigate_to_bottom() {
-    log_info "Navigating to bottom of stack..."
-    gt branch bottom
+    log_info "Navigating to bottom of stack..." >&2
+    gt branch bottom >&2
     local bottom_branch=$(get_current_branch)
-    log_success "At bottom of stack: $bottom_branch"
+    log_success "At bottom of stack: $bottom_branch" >&2
     echo "$bottom_branch"
 }
 
 # Find merge base with main
 find_merge_base() {
     local merge_base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main)
-    log_info "Merge base with main: $merge_base"
+    log_info "Merge base with main: $merge_base" >&2  # Redirect to stderr so it doesn't pollute return value
     echo "$merge_base"
 }
 
@@ -125,13 +125,13 @@ get_merge_commits() {
     fi
     
     if [ -z "$merge_commits" ]; then
-        log_info "No commits found on main since merge base (stack is up to date)"
+        log_info "No commits found on main since merge base (stack is up to date)" >&2
         return 1
     fi
     
-    log_info "Found commits on main since merge base:"
+    log_info "Found commits on main since merge base:" >&2
     echo "$merge_commits" | while read -r commit; do
-        log_info "  $commit"
+        log_info "  $commit" >&2
     done
     
     echo "$merge_commits"
@@ -189,8 +189,8 @@ find_local_branch() {
 is_branch_in_stack() {
     local branch_name="$1"
     
-    # Get current stack info
-    local stack_info=$(gt log --quiet 2>/dev/null || echo "")
+    # Get current stack info (use --stack to scope to current stack only)
+    local stack_info=$(gt log --stack --quiet 2>/dev/null || echo "")
     
     if echo "$stack_info" | grep -q "$branch_name"; then
         return 0
@@ -267,8 +267,8 @@ remove_branch_from_stack() {
         if gt branch untrack "$branch_name"; then
             log_success "Successfully untracked branch $branch_name"
             
-            # Checkout another branch before deleting the local branch
-            local other_branch=$(gt log --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | grep -v "^$branch_name$" | head -1)
+            # Checkout another branch before deleting the local branch (use --stack to scope to current stack only)
+            local other_branch=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | grep -v "^$branch_name$" | head -1)
             
             if [ -n "$other_branch" ]; then
                 log_info "Checking out $other_branch before deleting $branch_name..."
@@ -294,8 +294,8 @@ remove_branch_from_stack() {
 cleanup_identical_branches() {
     log_info "Checking for branches identical to main or empty..."
     
-    # Get all branches in current stack
-    local stack_branches=$(gt log --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" || echo "")
+    # Get all branches in current stack (use --stack to scope to current stack only)
+    local stack_branches=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" || echo "")
     
     if [ -z "$stack_branches" ]; then
         log_info "No branches found in stack to check"
@@ -526,7 +526,7 @@ main_cleanup() {
     # Check if current branch is tracked, if not, checkout a tracked branch
     if ! gt branch info > /dev/null 2>&1; then
         log_info "Current branch is not tracked, finding a tracked branch to checkout..."
-        local tracked_branch=$(gt log --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | head -1)
+        local tracked_branch=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | head -1)
         
         if [ -n "$tracked_branch" ]; then
             log_info "Checking out tracked branch: $tracked_branch"
@@ -561,14 +561,8 @@ main_cleanup() {
         log_warning "Skipping restack - no tracked branch available"
     fi
     
-    # Sync with main
-    log_info "Syncing with main..."
-    if gt repo sync --no-interactive; then
-        log_success "Successfully synced with main"
-    else
-        log_error "Failed to sync with main"
-        return 1
-    fi
+    # Note: We don't call 'gt repo sync' here - let the user run it manually if needed
+    # This avoids the verbose output from gt checking all local branches
     
     # Navigate back to appropriate branch
     navigate_back_to_original_or_bottom "$original_branch"
