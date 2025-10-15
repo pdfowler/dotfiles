@@ -384,22 +384,24 @@ process_merge_commit() {
     log_info "Switching to branch: $local_branch"
     gt branch checkout "$local_branch"
     
-    # Rebase onto the squash merge commit
-    log_info "Rebasing $local_branch onto $commit_sha"
-    if git rebase "$commit_sha"; then
-        log_success "Successfully rebased $local_branch onto $commit_sha"
-    else
-        log_error "Failed to rebase $local_branch onto $commit_sha"
-        log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
-        return 1
-    fi
-    
-    # Squash the branch
+    # IMPORTANT: Squash FIRST, then rebase
+    # Squashing consolidates all commits into one, making the rebase cleaner
     log_info "Squashing branch: $local_branch"
     if gt branch squash; then
         log_success "Successfully squashed $local_branch"
     else
         log_error "Failed to squash $local_branch"
+        return 1
+    fi
+    
+    # Now rebase the squashed commit onto the squash-merge commit on main
+    # Since both represent the same changes, this should be a clean rebase
+    log_info "Rebasing squashed $local_branch onto $commit_sha"
+    if git rebase "$commit_sha"; then
+        log_success "Successfully rebased $local_branch onto $commit_sha"
+    else
+        log_error "Failed to rebase $local_branch onto $commit_sha"
+        log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
         return 1
     fi
     
