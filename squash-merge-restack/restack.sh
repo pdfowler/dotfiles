@@ -229,62 +229,36 @@ branch_is_empty() {
     fi
 }
 
-# Remove branch from stack using gt branch unbranch or untrack
+# Remove branch from stack using gt branch delete (properly handles children)
 remove_branch_from_stack() {
     local branch_name="$1"
     local current_branch=$(get_current_branch)
     
-    # Check if we're currently on the branch that needs to be removed
+    log_info "Removing merged branch: $branch_name"
+    
+    # If we're currently on the branch being removed, move to parent or main
     if [[ "$current_branch" == "$branch_name" ]]; then
-        log_info "Currently on branch $branch_name, using gt branch unbranch..."
+        log_info "Currently on $branch_name, navigating to parent..."
         
-        # Use gt branch unbranch to remove the current branch
-        if gt branch unbranch; then
-            log_success "Successfully unbrached current branch $branch_name"
-        else
-            log_error "Failed to unbranch current branch $branch_name"
-            return 1
-        fi
-    else
-        log_info "Switching to branch $branch_name before removing..."
-        
-        # Switch to the branch first
-        if ! gt branch checkout "$branch_name"; then
-            log_error "Failed to checkout branch $branch_name"
-            return 1
-        fi
-        
-        # Try to go "up" to the parent branch if possible
-        log_info "Attempting to navigate up from $branch_name..."
+        # Try to move up to parent branch
         if gt branch up 2>/dev/null; then
-            log_success "Navigated up to parent branch"
+            log_success "Moved to parent branch"
         else
-            log_info "Could not navigate up, staying on $branch_name"
+            # If no parent, go to main
+            log_info "No parent branch, switching to main"
+            git checkout main 2>/dev/null || true
         fi
-        
-        # Now remove the branch
-        log_info "Removing branch $branch_name..."
-        if gt branch untrack "$branch_name"; then
-            log_success "Successfully untracked branch $branch_name"
-            
-            # Checkout another branch before deleting the local branch (use --stack to scope to current stack only)
-            local other_branch=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | grep -v "^$branch_name$" | head -1)
-            
-            if [ -n "$other_branch" ]; then
-                log_info "Checking out $other_branch before deleting $branch_name..."
-                gt branch checkout "$other_branch" 2>/dev/null || true
-            fi
-            
-            # Delete the local branch
-            if git branch -D "$branch_name"; then
-                log_success "Successfully deleted local branch $branch_name"
-            else
-                log_warning "Failed to delete local branch $branch_name"
-            fi
-        else
-            log_error "Failed to untrack branch $branch_name"
-            return 1
-        fi
+    fi
+    
+    # Use gt branch delete which properly handles children (reattaches them to parent)
+    # Use --force to skip the "is merged" check since we already verified it's merged
+    # Use --no-verify to skip hooks in automated context
+    log_info "Deleting branch $branch_name (children will be reattached to parent)..."
+    if gt branch delete "$branch_name" --force --no-verify; then
+        log_success "Successfully deleted branch $branch_name"
+    else
+        log_error "Failed to delete branch $branch_name"
+        return 1
     fi
     
     return 0
