@@ -387,7 +387,7 @@ process_merge_commit() {
     # IMPORTANT: Squash FIRST, then rebase
     # Squashing consolidates all commits into one, making the rebase cleaner
     log_info "Squashing branch: $local_branch"
-    if gt branch squash; then
+    if gt branch squash --no-verify --no-edit; then
         log_success "Successfully squashed $local_branch"
     else
         log_error "Failed to squash $local_branch"
