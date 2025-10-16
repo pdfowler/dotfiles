@@ -514,18 +514,16 @@ main_cleanup() {
     
     # Now try restack if we're on a tracked branch
     if gt branch info > /dev/null 2>&1; then
-        # Check if branches are behind main (likely to cause conflicts)
-        local current_branch=$(get_current_branch)
-        local main_sha=$(git rev-parse origin/main 2>/dev/null || git rev-parse main)
-        local branch_sha=$(git rev-parse "$current_branch")
-        
-        # If branch is not based on main, restack might cause conflicts
-        if ! git merge-base --is-ancestor "$main_sha" "$branch_sha" 2>/dev/null; then
-            log_warning "Branch $current_branch appears to be behind main, restack may cause conflicts"
-            log_info "Skipping restack to avoid conflicts. You can run 'gt stack restack' manually later if needed."
+        # Let gt stack restack decide if restacking is needed
+        # It's smarter about detecting conflicts and will skip if not needed
+        log_info "Running gt stack restack..."
+        if gt stack restack; then
+            log_success "Successfully restacked"
         else
-            if gt stack restack; then
-                log_success "Successfully restacked"
+            # Check if it failed due to conflicts or just "not needed"
+            local restack_output=$(gt stack restack 2>&1 || true)
+            if echo "$restack_output" | grep -q "does not need to be restacked"; then
+                log_info "Stack is already up to date, no restack needed"
             else
                 log_warning "Restack failed - this may be due to merge conflicts"
                 log_info "You can resolve conflicts manually and run 'gt continue' to continue"
