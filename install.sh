@@ -127,9 +127,11 @@ fi
 
 install_packages
 
-# Setup git aliases for branch cleanup
+# Setup git aliases
 echo -e "${YELLOW}Setting up git aliases...${NC}"
 git config --global alias.prune-local '!$HOME/.config/shell/cleanup-merged-branches.sh'
+git config --global alias.relink '!BRANCH=$(git rev-parse --abbrev-ref HEAD) && git branch --set-upstream-to=origin/$BRANCH && echo "✅ Linked $BRANCH to origin/$BRANCH"'
+git config --global alias.sync-main '!git fetch origin && git update-ref refs/heads/main refs/remotes/origin/main && echo "✅ Synced main branch from origin"'
 echo -e "${GREEN}✓ Git aliases configured${NC}"
 
 echo -e "${GREEN}✅ Dotfiles installation complete!${NC}"
