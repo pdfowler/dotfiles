@@ -671,6 +671,9 @@ main_cleanup() {
             log_success "Stack restacked successfully (or already up to date)"
         elif echo "$restack_output" | grep -q -E "(Hit conflict|Unmerged files|You are here \(resolving)"; then
             log_error "Restack encountered merge conflicts!"
+            echo ""
+            echo "$restack_output"
+            echo ""
             log_info "The script has stopped to prevent further issues."
             log_info ""
             log_info "To resolve:"
