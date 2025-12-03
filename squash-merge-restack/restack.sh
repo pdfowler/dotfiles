@@ -434,7 +434,7 @@ process_merge_commit() {
     local squash_max_attempts=3
     while [ $squash_attempts -lt $squash_max_attempts ]; do
         if gt branch squash --no-verify --no-edit 2>&1 | tee /tmp/gt_squash_output.txt; then
-            log_success "Successfully squashed $local_branch"
+        log_success "Successfully squashed $local_branch"
             
             # Give git a moment to release locks (worktree race condition mitigation)
             # Longer delay needed when children are restacked
@@ -453,8 +453,8 @@ process_merge_commit() {
                     rm -f /tmp/gt_squash_output.txt
                     return 1
                 fi
-            else
-                log_error "Failed to squash $local_branch"
+    else
+        log_error "Failed to squash $local_branch"
                 rm -f /tmp/gt_squash_output.txt
                 return 1
             fi
@@ -494,8 +494,8 @@ process_merge_commit() {
                 log_error "Failed to rebase $local_branch onto $commit_sha"
                 log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
                 rm -f /tmp/gt_rebase_output.txt
-                return 1
-            fi
+        return 1
+    fi
         fi
     done
     
@@ -510,19 +510,43 @@ navigate_back_to_original_or_bottom() {
     
     # Check if the original branch still exists and is tracked
     if git show-ref --verify --quiet "refs/heads/$original_branch" 2>/dev/null; then
-        # Check if it's still tracked by Charcoal
-        if gt branch checkout "$original_branch" 2>/dev/null; then
-            log_success "Returned to original branch: $original_branch"
-            return 0
-        else
-            log_warning "Original branch $original_branch exists but is not tracked by Charcoal"
-        fi
+        # Retry checkout up to 3 times if lock contention occurs
+        local checkout_attempts=0
+        local checkout_max_attempts=3
+        while [ $checkout_attempts -lt $checkout_max_attempts ]; do
+            clean_stale_locks
+            if gt branch checkout "$original_branch" 2>&1 | tee /tmp/gt_checkout_output.txt; then
+                log_success "Returned to original branch: $original_branch"
+                rm -f /tmp/gt_checkout_output.txt
+                return 0
+            else
+                local checkout_output=$(cat /tmp/gt_checkout_output.txt)
+                if echo "$checkout_output" | grep -q "index.lock"; then
+                    ((checkout_attempts++))
+                    if [ $checkout_attempts -lt $checkout_max_attempts ]; then
+                        log_warning "Lock contention during checkout, cleaning and retrying (attempt $checkout_attempts/$checkout_max_attempts)..."
+                        sleep 1.5
+                    else
+                        log_warning "Failed to checkout $original_branch after $checkout_max_attempts attempts (lock contention)"
+                        rm -f /tmp/gt_checkout_output.txt
+                        break
+                    fi
+                else
+                    # Not a lock issue - branch might not be tracked
+                    log_warning "Original branch $original_branch exists but checkout failed (may not be tracked by Charcoal)"
+                    rm -f /tmp/gt_checkout_output.txt
+                    break
+                fi
+            fi
+        done
+        rm -f /tmp/gt_checkout_output.txt
     else
         log_info "Original branch $original_branch no longer exists"
     fi
     
     # If we can't go back to original branch, go to bottom of stack
     log_info "Navigating to bottom of stack..."
+    clean_stale_locks
     if gt branch bottom; then
         local bottom_branch=$(get_current_branch)
         log_success "Navigated to bottom of stack: $bottom_branch"
@@ -597,26 +621,26 @@ main_cleanup() {
         log_info "Found $total_commits commits on origin/main since stack diverged"
         log_info "Scanning for squash-merged PRs that match branches in current stack..."
         echo "" # Blank line for the progress indicator
-        
-        # Process each merge commit
-        local processed_count=0
+    
+    # Process each merge commit
+    local processed_count=0
         local checked_count=0
-        while IFS= read -r commit_line; do
-            if [ -z "$commit_line" ]; then
-                continue
-            fi
-            
-            local commit_sha=$(echo "$commit_line" | cut -d' ' -f1)
+    while IFS= read -r commit_line; do
+        if [ -z "$commit_line" ]; then
+            continue
+        fi
+        
+        local commit_sha=$(echo "$commit_line" | cut -d' ' -f1)
             ((checked_count++))
             
             # Show progress on same line (will be cleared if branch is found)
             printf "\r${BLUE}[SCAN]${NC} Checking merge commit %d/%d on origin/main...  " "$checked_count" "$total_commits"
-            
+        
             # FAIL-FAST: If processing fails, stop immediately
-            if process_merge_commit "$commit_sha" "$commit_line"; then
+        if process_merge_commit "$commit_sha" "$commit_line"; then
                 # Clear the progress line before showing success message
                 printf "\r\033[K"
-                ((processed_count++))
+            ((processed_count++))
             else
                 local exit_code=$?
                 # Clear the progress line
@@ -630,10 +654,10 @@ main_cleanup() {
                     exit 1
                 fi
                 # If exit_code is 0, it was just skipped (no action needed)
-            fi
-            
-        done <<< "$merge_commits"
+        fi
         
+    done <<< "$merge_commits"
+    
         # Clear the progress line and show final summary
         printf "\r\033[K"
         local skipped_count=$((total_commits - processed_count))
@@ -667,8 +691,10 @@ main_cleanup() {
         local restack_output
         restack_output=$(gt stack restack 2>&1 || true)
         
-        if echo "$restack_output" | grep -q -E "(does not need to be restacked|Successfully restacked)"; then
+        if echo "$restack_output" | grep -q -E "(does not need to be restacked|Successfully restacked|^Restacked)"; then
             log_success "Stack restacked successfully (or already up to date)"
+            # Give git time to release locks after restack operations
+            sleep 1.5
         elif echo "$restack_output" | grep -q -E "(Hit conflict|Unmerged files|You are here \(resolving)"; then
             log_error "Restack encountered merge conflicts!"
             echo ""
