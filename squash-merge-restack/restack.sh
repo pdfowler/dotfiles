@@ -417,7 +417,8 @@ process_merge_commit() {
             log_success "Successfully squashed $local_branch"
             
             # Give git a moment to release locks (worktree race condition mitigation)
-            sleep 0.5
+            # Longer delay needed when children are restacked
+            sleep 1.5
             break
         else
             local squash_output=$(cat /tmp/gt_squash_output.txt)
@@ -444,14 +445,39 @@ process_merge_commit() {
     # Now rebase the squashed commit onto the squash-merge commit on main
     # Since both represent the same changes, this should be a clean rebase
     log_info "Rebasing squashed $local_branch onto $commit_sha"
-    clean_stale_locks
-    if git rebase "$commit_sha"; then
-        log_success "Successfully rebased $local_branch onto $commit_sha"
-    else
-        log_error "Failed to rebase $local_branch onto $commit_sha"
-        log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
-        return 1
-    fi
+    
+    # Retry rebase up to 3 times if lock contention occurs
+    local rebase_attempts=0
+    local rebase_max_attempts=3
+    while [ $rebase_attempts -lt $rebase_max_attempts ]; do
+        clean_stale_locks
+        if git rebase "$commit_sha" 2>&1 | tee /tmp/gt_rebase_output.txt; then
+            log_success "Successfully rebased $local_branch onto $commit_sha"
+            rm -f /tmp/gt_rebase_output.txt
+            break
+        else
+            local rebase_output=$(cat /tmp/gt_rebase_output.txt)
+            if echo "$rebase_output" | grep -q "index.lock"; then
+                ((rebase_attempts++))
+                if [ $rebase_attempts -lt $rebase_max_attempts ]; then
+                    log_warning "Lock contention during rebase, cleaning and retrying (attempt $rebase_attempts/$rebase_max_attempts)..."
+                    git rebase --abort 2>/dev/null || true
+                    sleep 1.5
+                    clean_stale_locks
+                else
+                    log_error "Failed to rebase $local_branch onto $commit_sha after $rebase_max_attempts attempts (lock contention)"
+                    git rebase --abort 2>/dev/null || true
+                    rm -f /tmp/gt_rebase_output.txt
+                    return 1
+                fi
+            else
+                log_error "Failed to rebase $local_branch onto $commit_sha"
+                log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
+                rm -f /tmp/gt_rebase_output.txt
+                return 1
+            fi
+        fi
+    done
     
     return 0
 }
