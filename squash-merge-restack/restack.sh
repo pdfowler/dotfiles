@@ -283,15 +283,32 @@ remove_branch_from_stack() {
     
     # If we're currently on the branch being removed, move to parent or main
     if [[ "$current_branch" == "$branch_name" ]]; then
-        log_info "Currently on $branch_name, navigating to parent..."
+        log_info "Currently on $branch_name, navigating away..."
         
-        # Try to move up to parent branch
-        if gt branch up 2>/dev/null; then
-            log_success "Moved to parent branch"
+        # Get list of children to check if there are multiple siblings
+        local children=$(gt branch children "$branch_name" 2>/dev/null || echo "")
+        
+        if [ -n "$children" ]; then
+            # Has children - pick the first child to move to (avoid interactive prompt)
+            local first_child=$(echo "$children" | head -1)
+            log_info "Moving to first child branch: $first_child"
+            clean_stale_locks
+            if gt branch checkout "$first_child" 2>/dev/null; then
+                log_success "Moved to child branch: $first_child"
+            else
+                log_warning "Failed to move to child, trying main"
+                git checkout main 2>/dev/null || true
+            fi
         else
-            # If no parent, go to main
-            log_info "No parent branch, switching to main"
-            git checkout main 2>/dev/null || true
+            # No children - try to move up to parent
+            log_info "No children, trying to move to parent..."
+            if gt branch up 2>/dev/null; then
+                log_success "Moved to parent branch"
+            else
+                # If no parent, go to main
+                log_info "No parent branch, switching to main"
+                git checkout main 2>/dev/null || true
+            fi
         fi
     fi
     
@@ -299,8 +316,11 @@ remove_branch_from_stack() {
     # Use --force to skip the "is merged" check since we already verified it's merged
     # Use --no-verify to skip hooks in automated context
     log_info "Deleting branch $branch_name (children will be reattached to parent)..."
-    if gt branch delete "$branch_name" --force --no-verify; then
+    clean_stale_locks
+    if gt branch delete "$branch_name" --force --no-verify 2>&1; then
         log_success "Successfully deleted branch $branch_name"
+        # Give git time to release locks after delete + restack operations
+        sleep 1.5
     else
         log_error "Failed to delete branch $branch_name"
         return 1
