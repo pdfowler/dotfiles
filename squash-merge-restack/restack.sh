@@ -45,6 +45,33 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Clean up stale git lock files (worktree-safe)
+clean_stale_locks() {
+    local git_dir=$(git rev-parse --git-dir 2>/dev/null || echo "")
+    
+    if [ -z "$git_dir" ]; then
+        return 0
+    fi
+    
+    # Check for index.lock in worktree git dir
+    local index_lock="$git_dir/index.lock"
+    if [ -f "$index_lock" ]; then
+        # Check if the lock is stale (older than 10 seconds)
+        if [ "$(uname)" = "Darwin" ]; then
+            # macOS stat
+            local lock_age=$(($(date +%s) - $(stat -f %m "$index_lock")))
+        else
+            # Linux stat
+            local lock_age=$(($(date +%s) - $(stat -c %Y "$index_lock")))
+        fi
+        
+        if [ "$lock_age" -gt 10 ]; then
+            log_warning "Found stale index.lock (${lock_age}s old), removing..."
+            rm -f "$index_lock" 2>/dev/null || true
+        fi
+    fi
+}
+
 # Check if gt command is available
 check_gt_command() {
     if ! command -v gt &> /dev/null; then
@@ -105,7 +132,13 @@ navigate_to_bottom() {
 
 # Find merge base with main
 find_merge_base() {
-    local merge_base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main)
+    local trunk_ref
+    if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+        trunk_ref="origin/main"
+    else
+        trunk_ref="main"
+    fi
+    local merge_base=$(git merge-base HEAD "$trunk_ref")
     log_info "Merge base with main: $merge_base" >&2  # Redirect to stderr so it doesn't pollute return value
     echo "$merge_base"
 }
@@ -202,7 +235,13 @@ is_branch_in_stack() {
 # Check if branch has the same SHA as main
 branch_equals_main() {
     local branch_name="$1"
-    local main_sha=$(git rev-parse main 2>/dev/null || git rev-parse origin/main)
+    local trunk_ref
+    if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+        trunk_ref="origin/main"
+    else
+        trunk_ref="main"
+    fi
+    local main_sha=$(git rev-parse "$trunk_ref")
     local branch_sha=$(git rev-parse "$branch_name" 2>/dev/null)
     
     if [[ "$branch_sha" == "$main_sha" ]]; then
@@ -216,7 +255,13 @@ branch_equals_main() {
 # Check if branch has no commits (empty branch)
 branch_is_empty() {
     local branch_name="$1"
-    local main_sha=$(git rev-parse main 2>/dev/null || git rev-parse origin/main)
+    local trunk_ref
+    if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+        trunk_ref="origin/main"
+    else
+        trunk_ref="main"
+    fi
+    local main_sha=$(git rev-parse "$trunk_ref")
     local branch_sha=$(git rev-parse "$branch_name" 2>/dev/null)
     local merge_base=$(git merge-base "$branch_sha" "$main_sha")
     
@@ -356,21 +401,50 @@ process_merge_commit() {
     
     # Switch to the branch
     log_info "Switching to branch: $local_branch"
+    clean_stale_locks
     gt branch checkout "$local_branch"
     
     # IMPORTANT: Squash FIRST, then rebase
     # Squashing consolidates all commits into one, making the rebase cleaner
     log_info "Squashing branch: $local_branch"
-    if gt branch squash --no-verify --no-edit; then
-        log_success "Successfully squashed $local_branch"
-    else
-        log_error "Failed to squash $local_branch"
-        return 1
-    fi
+    clean_stale_locks
+    
+    # Retry squash up to 3 times if lock contention occurs
+    local squash_attempts=0
+    local squash_max_attempts=3
+    while [ $squash_attempts -lt $squash_max_attempts ]; do
+        if gt branch squash --no-verify --no-edit 2>&1 | tee /tmp/gt_squash_output.txt; then
+            log_success "Successfully squashed $local_branch"
+            
+            # Give git a moment to release locks (worktree race condition mitigation)
+            sleep 0.5
+            break
+        else
+            local squash_output=$(cat /tmp/gt_squash_output.txt)
+            if echo "$squash_output" | grep -q "index.lock"; then
+                ((squash_attempts++))
+                if [ $squash_attempts -lt $squash_max_attempts ]; then
+                    log_warning "Lock contention detected, cleaning and retrying (attempt $squash_attempts/$squash_max_attempts)..."
+                    sleep 1
+                    clean_stale_locks
+                else
+                    log_error "Failed to squash $local_branch after $squash_max_attempts attempts (lock contention)"
+                    rm -f /tmp/gt_squash_output.txt
+                    return 1
+                fi
+            else
+                log_error "Failed to squash $local_branch"
+                rm -f /tmp/gt_squash_output.txt
+                return 1
+            fi
+        fi
+    done
+    rm -f /tmp/gt_squash_output.txt
     
     # Now rebase the squashed commit onto the squash-merge commit on main
     # Since both represent the same changes, this should be a clean rebase
     log_info "Rebasing squashed $local_branch onto $commit_sha"
+    clean_stale_locks
     if git rebase "$commit_sha"; then
         log_success "Successfully rebased $local_branch onto $commit_sha"
     else
@@ -431,6 +505,33 @@ main_cleanup() {
         log_success "Successfully fetched latest changes from origin/main"
     else
         log_warning "Failed to fetch from origin/main, continuing anyway"
+    fi
+    
+    # Ensure local main matches origin/main (without switching branches)
+    # This avoids inconsistencies in tools that reference the local 'main' ref.
+    # In worktrees, `git branch --force` can fail if 'main' is checked out elsewhere,
+    # so prefer `git update-ref` to move the ref directly.
+    if git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+        local current_branch_for_sync
+        current_branch_for_sync=$(get_current_branch)
+        if [ "$current_branch_for_sync" != "main" ]; then
+            if git show-ref --verify --quiet refs/heads/main; then
+                if git update-ref refs/heads/main refs/remotes/origin/main; then
+                    log_success "Aligned local 'main' to origin/main"
+                else
+                    log_warning "Failed to align local 'main' to origin/main"
+                fi
+            else
+                # Create local main if missing
+                if git branch main refs/remotes/origin/main >/dev/null 2>&1; then
+                    log_success "Created local 'main' from origin/main"
+                else
+                    log_warning "Failed to create local 'main' from origin/main"
+                fi
+            fi
+        else
+            log_info "On 'main'; skipping local ref alignment to avoid working tree changes"
+        fi
     fi
     
     # Navigate to bottom of stack
