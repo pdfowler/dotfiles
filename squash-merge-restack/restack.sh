@@ -664,19 +664,26 @@ main_cleanup() {
         # Let gt stack restack decide if restacking is needed
         # It's smarter about detecting conflicts and will skip if not needed
         log_info "Running gt stack restack..."
-        if gt stack restack; then
-            log_success "Successfully restacked"
+        local restack_output
+        restack_output=$(gt stack restack 2>&1 || true)
+        
+        if echo "$restack_output" | grep -q -E "(does not need to be restacked|Successfully restacked)"; then
+            log_success "Stack restacked successfully (or already up to date)"
+        elif echo "$restack_output" | grep -q -E "(Hit conflict|Unmerged files|You are here \(resolving)"; then
+            log_error "Restack encountered merge conflicts!"
+            log_info "The script has stopped to prevent further issues."
+            log_info ""
+            log_info "To resolve:"
+            log_info "  1. Resolve the listed merge conflicts in your editor"
+            log_info "  2. Stage resolved files with: gt add ."
+            log_info "  3. Continue the restack with: gt continue"
+            log_info ""
+            log_info "Or to abort the restack:"
+            log_info "  gt rebase --abort"
+            exit 1
         else
-            # Check if it failed due to conflicts or just "not needed"
-            local restack_output=$(gt stack restack 2>&1 || true)
-            if echo "$restack_output" | grep -q "does not need to be restacked"; then
-                log_info "Stack is already up to date, no restack needed"
-            else
-                log_warning "Restack failed - this may be due to merge conflicts"
-                log_info "You can resolve conflicts manually and run 'gt continue' to continue"
-                log_info "Or run 'gt rebase --abort' to cancel the rebase"
-                log_info "Continuing with sync operation..."
-            fi
+            log_warning "Restack produced unexpected output, but continuing..."
+            echo "$restack_output" | head -5
         fi
     else
         log_warning "Skipping restack - no tracked branch available"
