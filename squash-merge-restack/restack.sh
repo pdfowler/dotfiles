@@ -435,23 +435,26 @@ main_cleanup() {
         # Fast-forward local main to origin/main (without switching branches)
         # This ensures gt stack restack uses the latest main, and comparisons are accurate
         if git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
-            local current_branch=$(get_current_branch)
-            if [ "$current_branch" != "main" ]; then
+            local current_branch
+            current_branch=$(get_current_branch || echo "")
+            if [ -n "$current_branch" ] && [ "$current_branch" != "main" ]; then
                 # Use update-ref to avoid switching branches (works in worktrees)
-                if git show-ref --verify --quiet refs/heads/main; then
-                    if git update-ref refs/heads/main refs/remotes/origin/main; then
+                if git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
+                    if git update-ref refs/heads/main refs/remotes/origin/main 2>/dev/null; then
                         log_success "Fast-forwarded local 'main' to origin/main"
                     else
-                        log_warning "Failed to fast-forward local 'main' to origin/main"
+                        log_warning "Failed to fast-forward local 'main' to origin/main (continuing anyway)"
                     fi
                 else
                     # Create local main if missing (without checking it out)
-                    if git update-ref refs/heads/main refs/remotes/origin/main; then
+                    if git update-ref refs/heads/main refs/remotes/origin/main 2>/dev/null; then
                         log_success "Created local 'main' from origin/main"
                     else
-                        log_warning "Failed to create local 'main' from origin/main"
+                        log_warning "Failed to create local 'main' from origin/main (continuing anyway)"
                     fi
                 fi
+            elif [ -z "$current_branch" ]; then
+                log_warning "Could not determine current branch, skipping main fast-forward"
             else
                 log_info "On 'main'; skipping fast-forward to avoid working tree changes"
             fi
