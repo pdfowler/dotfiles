@@ -45,33 +45,6 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Clean up stale git lock files (worktree-safe)
-clean_stale_locks() {
-    local git_dir=$(git rev-parse --git-dir 2>/dev/null || echo "")
-    
-    if [ -z "$git_dir" ]; then
-        return 0
-    fi
-    
-    # Check for index.lock in worktree git dir
-    local index_lock="$git_dir/index.lock"
-    if [ -f "$index_lock" ]; then
-        # Check if the lock is stale (older than 10 seconds)
-        if [ "$(uname)" = "Darwin" ]; then
-            # macOS stat
-            local lock_age=$(($(date +%s) - $(stat -f %m "$index_lock")))
-        else
-            # Linux stat
-            local lock_age=$(($(date +%s) - $(stat -c %Y "$index_lock")))
-        fi
-        
-        if [ "$lock_age" -gt 10 ]; then
-            log_warning "Found stale index.lock (${lock_age}s old), removing..."
-            rm -f "$index_lock" 2>/dev/null || true
-        fi
-    fi
-}
-
 # Check if gt command is available
 check_gt_command() {
     if ! command -v gt &> /dev/null; then
@@ -132,13 +105,7 @@ navigate_to_bottom() {
 
 # Find merge base with main
 find_merge_base() {
-    local trunk_ref
-    if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
-        trunk_ref="origin/main"
-    else
-        trunk_ref="main"
-    fi
-    local merge_base=$(git merge-base HEAD "$trunk_ref")
+    local merge_base=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main)
     log_info "Merge base with main: $merge_base" >&2  # Redirect to stderr so it doesn't pollute return value
     echo "$merge_base"
 }
@@ -233,19 +200,14 @@ is_branch_in_stack() {
 }
 
 # Check if branch has the same SHA as main
+# Always compare against origin/main since that's where merged PRs are
 branch_equals_main() {
     local branch_name="$1"
-    local trunk_ref
-    if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
-        trunk_ref="origin/main"
-    else
-        trunk_ref="main"
-    fi
-    local main_sha=$(git rev-parse "$trunk_ref")
+    local main_sha=$(git rev-parse origin/main 2>/dev/null || git rev-parse main)
     local branch_sha=$(git rev-parse "$branch_name" 2>/dev/null)
     
     if [[ "$branch_sha" == "$main_sha" ]]; then
-        log_info "Branch $branch_name has same SHA as main: $branch_sha"
+        log_info "Branch $branch_name has same SHA as origin/main: $branch_sha"
         return 0
     else
         return 1
@@ -253,21 +215,16 @@ branch_equals_main() {
 }
 
 # Check if branch has no commits (empty branch)
+# Always compare against origin/main since that's where merged PRs are
 branch_is_empty() {
     local branch_name="$1"
-    local trunk_ref
-    if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
-        trunk_ref="origin/main"
-    else
-        trunk_ref="main"
-    fi
-    local main_sha=$(git rev-parse "$trunk_ref")
+    local main_sha=$(git rev-parse origin/main 2>/dev/null || git rev-parse main)
     local branch_sha=$(git rev-parse "$branch_name" 2>/dev/null)
     local merge_base=$(git merge-base "$branch_sha" "$main_sha")
     
     # If the branch SHA equals the merge base, it has no unique commits
     if [[ "$branch_sha" == "$merge_base" ]]; then
-        log_info "Branch $branch_name has no unique commits"
+        log_info "Branch $branch_name has no unique commits compared to origin/main"
         return 0
     else
         return 1
@@ -283,32 +240,15 @@ remove_branch_from_stack() {
     
     # If we're currently on the branch being removed, move to parent or main
     if [[ "$current_branch" == "$branch_name" ]]; then
-        log_info "Currently on $branch_name, navigating away..."
+        log_info "Currently on $branch_name, navigating to parent..."
         
-        # Get list of children to check if there are multiple siblings
-        local children=$(gt branch children "$branch_name" 2>/dev/null || echo "")
-        
-        if [ -n "$children" ]; then
-            # Has children - pick the first child to move to (avoid interactive prompt)
-            local first_child=$(echo "$children" | head -1)
-            log_info "Moving to first child branch: $first_child"
-            clean_stale_locks
-            if gt branch checkout "$first_child" 2>/dev/null; then
-                log_success "Moved to child branch: $first_child"
-            else
-                log_warning "Failed to move to child, trying main"
-                git checkout main 2>/dev/null || true
-            fi
+        # Try to move up to parent branch
+        if gt branch up 2>/dev/null; then
+            log_success "Moved to parent branch"
         else
-            # No children - try to move up to parent
-            log_info "No children, trying to move to parent..."
-            if gt branch up 2>/dev/null; then
-                log_success "Moved to parent branch"
-            else
-                # If no parent, go to main
-                log_info "No parent branch, switching to main"
-                git checkout main 2>/dev/null || true
-            fi
+            # If no parent, go to main
+            log_info "No parent branch, switching to main"
+            git checkout main 2>/dev/null || true
         fi
     fi
     
@@ -316,11 +256,8 @@ remove_branch_from_stack() {
     # Use --force to skip the "is merged" check since we already verified it's merged
     # Use --no-verify to skip hooks in automated context
     log_info "Deleting branch $branch_name (children will be reattached to parent)..."
-    clean_stale_locks
-    if gt branch delete "$branch_name" --force --no-verify 2>&1; then
+    if gt branch delete "$branch_name" --force --no-verify; then
         log_success "Successfully deleted branch $branch_name"
-        # Give git time to release locks after delete + restack operations
-        sleep 1.5
     else
         log_error "Failed to delete branch $branch_name"
         return 1
@@ -421,83 +358,28 @@ process_merge_commit() {
     
     # Switch to the branch
     log_info "Switching to branch: $local_branch"
-    clean_stale_locks
     gt branch checkout "$local_branch"
     
     # IMPORTANT: Squash FIRST, then rebase
     # Squashing consolidates all commits into one, making the rebase cleaner
     log_info "Squashing branch: $local_branch"
-    clean_stale_locks
-    
-    # Retry squash up to 3 times if lock contention occurs
-    local squash_attempts=0
-    local squash_max_attempts=3
-    while [ $squash_attempts -lt $squash_max_attempts ]; do
-        if gt branch squash --no-verify --no-edit 2>&1 | tee /tmp/gt_squash_output.txt; then
+    if gt branch squash --no-verify --no-edit; then
         log_success "Successfully squashed $local_branch"
-            
-            # Give git a moment to release locks (worktree race condition mitigation)
-            # Longer delay needed when children are restacked
-            sleep 1.5
-            break
-        else
-            local squash_output=$(cat /tmp/gt_squash_output.txt)
-            if echo "$squash_output" | grep -q "index.lock"; then
-                ((squash_attempts++))
-                if [ $squash_attempts -lt $squash_max_attempts ]; then
-                    log_warning "Lock contention detected, cleaning and retrying (attempt $squash_attempts/$squash_max_attempts)..."
-                    sleep 1
-                    clean_stale_locks
-                else
-                    log_error "Failed to squash $local_branch after $squash_max_attempts attempts (lock contention)"
-                    rm -f /tmp/gt_squash_output.txt
-                    return 1
-                fi
     else
         log_error "Failed to squash $local_branch"
-                rm -f /tmp/gt_squash_output.txt
-                return 1
-            fi
-        fi
-    done
-    rm -f /tmp/gt_squash_output.txt
+        return 1
+    fi
     
     # Now rebase the squashed commit onto the squash-merge commit on main
     # Since both represent the same changes, this should be a clean rebase
     log_info "Rebasing squashed $local_branch onto $commit_sha"
-    
-    # Retry rebase up to 3 times if lock contention occurs
-    local rebase_attempts=0
-    local rebase_max_attempts=3
-    while [ $rebase_attempts -lt $rebase_max_attempts ]; do
-        clean_stale_locks
-        if git rebase "$commit_sha" 2>&1 | tee /tmp/gt_rebase_output.txt; then
-            log_success "Successfully rebased $local_branch onto $commit_sha"
-            rm -f /tmp/gt_rebase_output.txt
-            break
-        else
-            local rebase_output=$(cat /tmp/gt_rebase_output.txt)
-            if echo "$rebase_output" | grep -q "index.lock"; then
-                ((rebase_attempts++))
-                if [ $rebase_attempts -lt $rebase_max_attempts ]; then
-                    log_warning "Lock contention during rebase, cleaning and retrying (attempt $rebase_attempts/$rebase_max_attempts)..."
-                    git rebase --abort 2>/dev/null || true
-                    sleep 1.5
-                    clean_stale_locks
-                else
-                    log_error "Failed to rebase $local_branch onto $commit_sha after $rebase_max_attempts attempts (lock contention)"
-                    git rebase --abort 2>/dev/null || true
-                    rm -f /tmp/gt_rebase_output.txt
-                    return 1
-                fi
-            else
-                log_error "Failed to rebase $local_branch onto $commit_sha"
-                log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
-                rm -f /tmp/gt_rebase_output.txt
+    if git rebase "$commit_sha"; then
+        log_success "Successfully rebased $local_branch onto $commit_sha"
+    else
+        log_error "Failed to rebase $local_branch onto $commit_sha"
+        log_info "You may need to resolve conflicts manually and run 'git rebase --continue'"
         return 1
     fi
-        fi
-    done
     
     return 0
 }
@@ -510,43 +392,19 @@ navigate_back_to_original_or_bottom() {
     
     # Check if the original branch still exists and is tracked
     if git show-ref --verify --quiet "refs/heads/$original_branch" 2>/dev/null; then
-        # Retry checkout up to 3 times if lock contention occurs
-        local checkout_attempts=0
-        local checkout_max_attempts=3
-        while [ $checkout_attempts -lt $checkout_max_attempts ]; do
-            clean_stale_locks
-            if gt branch checkout "$original_branch" 2>&1 | tee /tmp/gt_checkout_output.txt; then
-                log_success "Returned to original branch: $original_branch"
-                rm -f /tmp/gt_checkout_output.txt
-                return 0
-            else
-                local checkout_output=$(cat /tmp/gt_checkout_output.txt)
-                if echo "$checkout_output" | grep -q "index.lock"; then
-                    ((checkout_attempts++))
-                    if [ $checkout_attempts -lt $checkout_max_attempts ]; then
-                        log_warning "Lock contention during checkout, cleaning and retrying (attempt $checkout_attempts/$checkout_max_attempts)..."
-                        sleep 1.5
-                    else
-                        log_warning "Failed to checkout $original_branch after $checkout_max_attempts attempts (lock contention)"
-                        rm -f /tmp/gt_checkout_output.txt
-                        break
-                    fi
-                else
-                    # Not a lock issue - branch might not be tracked
-                    log_warning "Original branch $original_branch exists but checkout failed (may not be tracked by Charcoal)"
-                    rm -f /tmp/gt_checkout_output.txt
-                    break
-                fi
-            fi
-        done
-        rm -f /tmp/gt_checkout_output.txt
+        # Check if it's still tracked by Charcoal
+        if gt branch checkout "$original_branch" 2>/dev/null; then
+            log_success "Returned to original branch: $original_branch"
+            return 0
+        else
+            log_warning "Original branch $original_branch exists but is not tracked by Charcoal"
+        fi
     else
         log_info "Original branch $original_branch no longer exists"
     fi
     
     # If we can't go back to original branch, go to bottom of stack
     log_info "Navigating to bottom of stack..."
-    clean_stale_locks
     if gt branch bottom; then
         local bottom_branch=$(get_current_branch)
         log_success "Navigated to bottom of stack: $bottom_branch"
@@ -573,35 +431,33 @@ main_cleanup() {
     log_info "Fetching latest changes from origin/main..."
     if git fetch origin main; then
         log_success "Successfully fetched latest changes from origin/main"
-    else
-        log_warning "Failed to fetch from origin/main, continuing anyway"
-    fi
-    
-    # Ensure local main matches origin/main (without switching branches)
-    # This avoids inconsistencies in tools that reference the local 'main' ref.
-    # In worktrees, `git branch --force` can fail if 'main' is checked out elsewhere,
-    # so prefer `git update-ref` to move the ref directly.
-    if git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
-        local current_branch_for_sync
-        current_branch_for_sync=$(get_current_branch)
-        if [ "$current_branch_for_sync" != "main" ]; then
-            if git show-ref --verify --quiet refs/heads/main; then
-                if git update-ref refs/heads/main refs/remotes/origin/main; then
-                    log_success "Aligned local 'main' to origin/main"
+        
+        # Fast-forward local main to origin/main (without switching branches)
+        # This ensures gt stack restack uses the latest main, and comparisons are accurate
+        if git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+            local current_branch=$(get_current_branch)
+            if [ "$current_branch" != "main" ]; then
+                # Use update-ref to avoid switching branches (works in worktrees)
+                if git show-ref --verify --quiet refs/heads/main; then
+                    if git update-ref refs/heads/main refs/remotes/origin/main; then
+                        log_success "Fast-forwarded local 'main' to origin/main"
+                    else
+                        log_warning "Failed to fast-forward local 'main' to origin/main"
+                    fi
                 else
-                    log_warning "Failed to align local 'main' to origin/main"
+                    # Create local main if missing (without checking it out)
+                    if git update-ref refs/heads/main refs/remotes/origin/main; then
+                        log_success "Created local 'main' from origin/main"
+                    else
+                        log_warning "Failed to create local 'main' from origin/main"
+                    fi
                 fi
             else
-                # Create local main if missing
-                if git branch main refs/remotes/origin/main >/dev/null 2>&1; then
-                    log_success "Created local 'main' from origin/main"
-                else
-                    log_warning "Failed to create local 'main' from origin/main"
-                fi
+                log_info "On 'main'; skipping fast-forward to avoid working tree changes"
             fi
-        else
-            log_info "On 'main'; skipping local ref alignment to avoid working tree changes"
         fi
+    else
+        log_warning "Failed to fetch from origin/main, continuing anyway"
     fi
     
     # Navigate to bottom of stack
@@ -621,26 +477,26 @@ main_cleanup() {
         log_info "Found $total_commits commits on origin/main since stack diverged"
         log_info "Scanning for squash-merged PRs that match branches in current stack..."
         echo "" # Blank line for the progress indicator
-    
-    # Process each merge commit
-    local processed_count=0
-        local checked_count=0
-    while IFS= read -r commit_line; do
-        if [ -z "$commit_line" ]; then
-            continue
-        fi
         
-        local commit_sha=$(echo "$commit_line" | cut -d' ' -f1)
+        # Process each merge commit
+        local processed_count=0
+        local checked_count=0
+        while IFS= read -r commit_line; do
+            if [ -z "$commit_line" ]; then
+                continue
+            fi
+            
+            local commit_sha=$(echo "$commit_line" | cut -d' ' -f1)
             ((checked_count++))
             
             # Show progress on same line (will be cleared if branch is found)
             printf "\r${BLUE}[SCAN]${NC} Checking merge commit %d/%d on origin/main...  " "$checked_count" "$total_commits"
-        
+            
             # FAIL-FAST: If processing fails, stop immediately
-        if process_merge_commit "$commit_sha" "$commit_line"; then
+            if process_merge_commit "$commit_sha" "$commit_line"; then
                 # Clear the progress line before showing success message
                 printf "\r\033[K"
-            ((processed_count++))
+                ((processed_count++))
             else
                 local exit_code=$?
                 # Clear the progress line
@@ -654,10 +510,10 @@ main_cleanup() {
                     exit 1
                 fi
                 # If exit_code is 0, it was just skipped (no action needed)
-        fi
+            fi
+            
+        done <<< "$merge_commits"
         
-    done <<< "$merge_commits"
-    
         # Clear the progress line and show final summary
         printf "\r\033[K"
         local skipped_count=$((total_commits - processed_count))
@@ -688,31 +544,19 @@ main_cleanup() {
         # Let gt stack restack decide if restacking is needed
         # It's smarter about detecting conflicts and will skip if not needed
         log_info "Running gt stack restack..."
-        local restack_output
-        restack_output=$(gt stack restack 2>&1 || true)
-        
-        if echo "$restack_output" | grep -q -E "(does not need to be restacked|Successfully restacked|^Restacked)"; then
-            log_success "Stack restacked successfully (or already up to date)"
-            # Give git time to release locks after restack operations
-            sleep 1.5
-        elif echo "$restack_output" | grep -q -E "(Hit conflict|Unmerged files|You are here \(resolving)"; then
-            log_error "Restack encountered merge conflicts!"
-            echo ""
-            echo "$restack_output"
-            echo ""
-            log_info "The script has stopped to prevent further issues."
-            log_info ""
-            log_info "To resolve:"
-            log_info "  1. Resolve the listed merge conflicts in your editor"
-            log_info "  2. Stage resolved files with: gt add ."
-            log_info "  3. Continue the restack with: gt continue"
-            log_info ""
-            log_info "Or to abort the restack:"
-            log_info "  gt rebase --abort"
-            exit 1
+        if gt stack restack; then
+            log_success "Successfully restacked"
         else
-            log_warning "Restack produced unexpected output, but continuing..."
-            echo "$restack_output" | head -5
+            # Check if it failed due to conflicts or just "not needed"
+            local restack_output=$(gt stack restack 2>&1 || true)
+            if echo "$restack_output" | grep -q "does not need to be restacked"; then
+                log_info "Stack is already up to date, no restack needed"
+            else
+                log_warning "Restack failed - this may be due to merge conflicts"
+                log_info "You can resolve conflicts manually and run 'gt continue' to continue"
+                log_info "Or run 'gt rebase --abort' to cancel the rebase"
+                log_info "Continuing with sync operation..."
+            fi
         fi
     else
         log_warning "Skipping restack - no tracked branch available"
