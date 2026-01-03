@@ -288,6 +288,45 @@ fix_nvm_comprehensive() {
     echo "✓ All NVM issues fixed"
 }
 
+# Fix aggressive Node.js takeovers from brew dependencies (like mongosh)
+fix_brew_node_takeover() {
+    echo "Fixing aggressive Node.js takeover from brew dependencies..."
+    
+    # Ensure NVM-managed Node takes precedence over brew Node
+    if [[ -n "${NVM_BIN:-}" ]] && [[ -d "$NVM_BIN" ]]; then
+        # Remove any brew node paths from PATH
+        export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "/opt/homebrew.*node" | tr '\n' ':' | sed 's/:$//')
+        
+        # Prepend NVM bin to PATH to ensure it takes precedence
+        export PATH="$NVM_BIN:$PATH"
+        
+        echo "✓ NVM-managed Node.js now takes precedence over brew Node"
+        echo "Current node: $(which node)"
+        echo "Node version: $(node --version)"
+    else
+        echo "⚠️  NVM_BIN not found. Make sure NVM is properly loaded."
+    fi
+}
+
+# Check for brew Node conflicts
+check_brew_node_conflict() {
+    echo "Checking for brew Node.js conflicts..."
+    
+    local brew_node_path=$(brew --prefix node 2>/dev/null || echo "")
+    local current_node=$(which node)
+    
+    if [[ -n "$brew_node_path" ]] && [[ "$current_node" == *"$brew_node_path"* ]]; then
+        echo "🚨 CONFLICT: Using brew Node.js instead of NVM-managed Node"
+        echo "  Brew Node path: $current_node"
+        echo "  Run 'fix_brew_node_takeover' to fix this"
+        return 1
+    else
+        echo "✅ No brew Node.js conflict detected"
+        echo "  Current Node: $current_node"
+        return 0
+    fi
+}
+
 # Global Python Virtual Environment Management
 # These functions help manage a global virtual environment for tools like uv/uvx
 
@@ -337,6 +376,9 @@ deactivate_global_venv() {
     fi
 }
 
+# Google Auth Helpers
+alias gauth='gcloud auth login && gcloud auth application-default login'
+
 # Quick alias to activate global venv
 alias gvenv='activate_global_venv'
 
@@ -346,8 +388,21 @@ alias gdeactivate='deactivate_global_venv'
 # Python aliases
 alias pip='pip3'
 
-# NX alias - uses local nx version when available, falls back to npx
+# MongoDB tools management (references software.sh functions)
+alias mongo-tools-install='install_mongodb_tools'
+alias mongo-tools-upgrade='upgrade_mongodb_tools'
+alias mongo-tools-check='check_upgrade_mongodb_tools'
+alias mongo-tools-clean='brew uninstall mongosh mongodb-database-tools 2>/dev/null || echo "No brew MongoDB tools to remove"'
+alias mongo-tools-conflict='check_brew_mongodb_conflict'
+
+# NX alias - uses local nx version when available, falls back to npx (Shiftsmart best practice)
 alias nx='npx nx'
+
+# Nx management aliases (references software.sh functions)
+alias nx-check-conflict='check_nx_conflict'
+alias nx-install-project='install_nx_in_project'
+alias nx-setup-project='setup_nx_project'
+alias nx-clean-brew='brew uninstall nx 2>/dev/null || echo "No brew nx to remove"'
 
 # Install uv (includes uvx) in global venv (convenience function)
 install_uv() {
@@ -393,6 +448,8 @@ alias fix-nvm='fix_nvm_comprehensive'
 alias fix-nvm-path='fix_nvm_hook_path'
 alias fix-nvm-nounset='fix_nvm_nounset'
 alias fix-nvm-corruption='fix_nvm_path_corruption'
+alias fix-brew-node='fix_brew_node_takeover'
+alias check-brew-node='check_brew_node_conflict'
 
 # Development workflow aliases (inspired by Shiftsmart's approach)
 alias node-dev='nvm use && npm run dev'
@@ -459,4 +516,31 @@ gt() {
         command gt "$@"
     fi
 }
+
+# Network diagnostics
+network-diagnostics() {
+    local script_path=""
+    
+    # Try multiple possible locations
+    if [[ -f "$HOME/.config/shell/network-diagnostics.sh" ]]; then
+        script_path="$HOME/.config/shell/network-diagnostics.sh"
+    elif [[ -n "$DOTFILES_DIR" && -f "$DOTFILES_DIR/config/shell/network-diagnostics.sh" ]]; then
+        script_path="$DOTFILES_DIR/config/shell/network-diagnostics.sh"
+    elif [[ -f "$HOME/Development/dotfiles/config/shell/network-diagnostics.sh" ]]; then
+        script_path="$HOME/Development/dotfiles/config/shell/network-diagnostics.sh"
+    elif [[ -f "./config/shell/network-diagnostics.sh" ]]; then
+        script_path="./config/shell/network-diagnostics.sh"
+    else
+        echo "Network diagnostics script not found"
+        echo "Searched in:"
+        echo "  - $HOME/.config/shell/network-diagnostics.sh"
+        [[ -n "$DOTFILES_DIR" ]] && echo "  - $DOTFILES_DIR/config/shell/network-diagnostics.sh"
+        echo "  - $HOME/Development/dotfiles/config/shell/network-diagnostics.sh"
+        return 1
+    fi
+    
+    "$script_path" "$@"
+}
+alias network-check='network-diagnostics'
+alias check-dean='network-diagnostics dean 192.168.13.105'
 

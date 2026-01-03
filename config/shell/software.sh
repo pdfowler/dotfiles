@@ -8,6 +8,17 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Generic command availability check
+# Check if a command is installed and available in PATH
+check_installed() {
+    local command_name="$1"
+    if [ -z "$command_name" ]; then
+        echo "Usage: check_installed <command_name>" >&2
+        return 1
+    fi
+    command -v "$command_name" >/dev/null 2>&1
+}
+
 # Rust/Cargo and git-stack Management
 # These functions handle Rust toolchain and git-stack installation/management
 
@@ -16,14 +27,9 @@ is_rust_installed() {
     command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1
 }
 
-# Check if git-stack is installed
-is_git_stack_installed() {
-    command -v git-stack >/dev/null 2>&1
-}
-
 # Get current git-stack version
 get_git_stack_version() {
-    if is_git_stack_installed; then
+    if check_installed git-stack; then
         # Try to get version from git-stack --version output
         local version_output
         version_output=$(git-stack --version 2>/dev/null | head -n1)
@@ -42,7 +48,7 @@ get_git_stack_version() {
 # Get latest git-stack version from crates.io
 get_latest_git_stack_version() {
     local latest_version
-    if command -v curl >/dev/null 2>&1; then
+    if check_installed curl; then
         latest_version=$(curl -s https://crates.io/api/v1/crates/git-stack | grep -o '"max_version":"[^"]*"' | sed 's/"max_version":"//' | sed 's/"//' 2>/dev/null)
         if [[ -n "$latest_version" ]]; then
             echo "$latest_version"
@@ -63,12 +69,6 @@ install_rust() {
         return 0
     fi
     
-    # Check if curl is available
-    if ! command -v curl >/dev/null 2>&1; then
-        echo -e "${RED}❌ Error: curl is required but not found. Please install curl first.${NC}"
-        return 1
-    fi
-    
     # Download and run the official Rust installer
     echo -e "${YELLOW}Downloading Rust installer...${NC}"
     if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable; then
@@ -79,9 +79,6 @@ install_rust() {
             source "$HOME/.cargo/env"
             echo -e "${GREEN}✓ Cargo environment sourced for current session${NC}"
         fi
-        
-        # Ensure ~/.cargo/bin is in PATH
-        ensure_cargo_in_path
         
         return 0
     else
@@ -121,9 +118,6 @@ install_git_stack() {
         fi
     fi
     
-    # Ensure ~/.cargo/bin is in PATH
-    ensure_cargo_in_path
-    
     # Install git-stack
     echo -e "${YELLOW}Installing git-stack via Cargo...${NC}"
     if cargo install git-stack; then
@@ -145,7 +139,7 @@ register_git_stack_subcommand() {
     local git_exec_dir
     
     # Find git-stack executable
-    if command -v git-stack >/dev/null 2>&1; then
+    if check_installed git-stack; then
         git_stack_path=$(command -v git-stack)
     elif [[ -f "$HOME/.cargo/bin/git-stack" ]]; then
         git_stack_path="$HOME/.cargo/bin/git-stack"
@@ -155,7 +149,7 @@ register_git_stack_subcommand() {
     fi
     
     # Find git exec directory
-    if command -v git >/dev/null 2>&1; then
+    if check_installed git; then
         git_exec_dir=$(git --exec-path 2>/dev/null || echo "/usr/local/libexec/git-core")
     else
         echo -e "${YELLOW}⚠️  Warning: git not found, cannot register git-stack subcommand${NC}"
@@ -184,7 +178,7 @@ register_git_stack_subcommand() {
 upgrade_git_stack() {
     echo -e "${BLUE}Checking git-stack for updates...${NC}"
     
-    if ! is_git_stack_installed; then
+    if ! check_installed git-stack; then
         echo -e "${YELLOW}git-stack is not installed. Installing it first...${NC}"
         return install_git_stack
     fi
@@ -211,7 +205,7 @@ upgrade_git_stack() {
     echo -e "${YELLOW}Latest version: $latest_version${NC}"
     
     # Debug: Show raw version output
-    if is_git_stack_installed; then
+    if check_installed git-stack; then
         echo -e "${BLUE}Debug - Raw version output: $(git-stack --version 2>/dev/null | head -n1)${NC}"
     fi
     
@@ -246,7 +240,7 @@ upgrade_git_stack() {
 check_upgrade_git_stack() {
     echo -e "${BLUE}Checking git-stack status...${NC}"
     
-    if ! is_git_stack_installed; then
+    if ! check_installed git-stack; then
         echo -e "${YELLOW}git-stack is not installed.${NC}"
         read -p "Would you like to install it? (y/N): " -n 1 -r
         echo
@@ -302,7 +296,7 @@ setup_rust_and_git_stack() {
     ensure_cargo_in_path
     
     # Install or upgrade git-stack (always upgrade to latest)
-    if ! is_git_stack_installed; then
+    if ! check_installed git-stack; then
         echo -e "${YELLOW}Installing git-stack...${NC}"
         if ! install_git_stack; then
             echo -e "${RED}❌ Error: Failed to install git-stack${NC}"
@@ -343,7 +337,7 @@ setup_rust_and_git_stack_auto() {
     ensure_cargo_in_path
     
     # Always install or upgrade git-stack to latest version
-    if ! is_git_stack_installed; then
+    if ! check_installed git-stack; then
         echo -e "${YELLOW}Installing git-stack...${NC}"
         if ! install_git_stack; then
             echo -e "${RED}❌ Error: Failed to install git-stack${NC}"
@@ -373,13 +367,16 @@ setup_system_auto() {
     # Install git-sweep
     install_git_sweep
     
-    # Install MongoDB shell tools
-    install_mongosh
+    # Install MongoDB tools (direct download, no Homebrew dependencies)
+    install_mongodb_tools
     
     # Configure macOS Finder (only on macOS)
     if [[ "$OSTYPE" == "darwin"* ]]; then
         enable_finder_hidden_files
     fi
+
+    # Python setup
+    setup_python_environment_auto
     
     echo -e "${GREEN}✅ Complete system setup finished!${NC}"
 }
@@ -387,16 +384,11 @@ setup_system_auto() {
 # Git-sweep Management
 # These functions handle git-sweep installation and management
 
-# Check if git-sweep is installed
-is_git_sweep_installed() {
-    command -v git-sweep >/dev/null 2>&1
-}
-
 # Install git-sweep via global virtual environment
 install_git_sweep() {
     echo -e "${BLUE}Installing git-sweep...${NC}"
     
-    if is_git_sweep_installed; then
+    if check_installed git-sweep; then
         echo -e "${GREEN}✓ git-sweep is already installed${NC}"
         return 0
     fi
@@ -433,86 +425,176 @@ install_git_sweep() {
     fi
 }
 
-# MongoDB Shell Tools Management
-# These functions handle MongoDB shell tools installation and management
+# MongoDB Tools Management
+# These functions handle MongoDB tools installation and management without Homebrew dependencies
 
-# Check if mongosh is installed
-is_mongosh_installed() {
-    command -v mongosh >/dev/null 2>&1
+# Check if MongoDB tools are installed
+is_mongodb_tools_installed() {
+    command -v mongosh >/dev/null 2>&1 && command -v mongodump >/dev/null 2>&1
 }
 
 # Get current mongosh version
 get_mongosh_version() {
-    if is_mongosh_installed; then
+    if check_installed mongosh; then
         mongosh --version 2>/dev/null | head -n1 | sed 's/.*mongosh[[:space:]]*//' | sed 's/[[:space:]].*//' | head -n1
     else
         echo "not-installed"
     fi
 }
 
-# Install mongosh via Homebrew
+# Ensure ~/.local/bin is in PATH (needed for MongoDB tools)
+ensure_local_bin_in_path() {
+    local local_bin="$HOME/.local/bin"
+    
+    if [[ ":$PATH:" != *":$local_bin:"* ]]; then
+        echo -e "${YELLOW}Adding $local_bin to PATH...${NC}"
+        export PATH="$local_bin:$PATH"
+        
+        # Add to shell profile
+        case "$SHELL" in
+            */zsh)
+                local profile="$HOME/.zshrc"
+                ;;
+            */bash)
+                local profile="$HOME/.bashrc"
+                ;;
+            *)
+                echo -e "${YELLOW}⚠️  Unknown shell: $SHELL${NC}"
+                return 1
+                ;;
+        esac
+        
+        if ! grep -q "export PATH=\"\$HOME/.local/bin:\$PATH\"" "$profile" 2>/dev/null; then
+            echo -e "${YELLOW}Adding PATH export to $profile...${NC}"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$profile"
+            echo -e "${GREEN}✓ Added to $profile - restart your shell or run 'source $profile'${NC}"
+        else
+            echo -e "${GREEN}✓ Already in $profile${NC}"
+        fi
+    else
+        echo -e "${GREEN}✓ $local_bin is already in PATH${NC}"
+    fi
+}
+
+# Install MongoDB tools via direct download (no Homebrew dependencies)
+install_mongodb_tools() {
+    echo -e "${BLUE}Installing MongoDB tools (direct download)...${NC}"
+    
+    if is_mongodb_tools_installed; then
+        echo -e "${GREEN}✓ MongoDB tools are already installed${NC}"
+        return 0
+    fi
+    
+    local LOCAL_BIN="$HOME/.local/bin"
+    local MONGO_TOOLS_DIR="$LOCAL_BIN/mongodb-tools"
+    local MONGO_TOOLS_VERSION="100.9.0"  # Latest stable version
+    local ARCH=$(uname -m)
+    local OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    
+    # Map architecture names
+    case "$ARCH" in
+        x86_64)
+            ARCH="x86_64"
+            ;;
+        arm64)
+            ARCH="arm64"
+            ;;
+        *)
+            echo -e "${RED}❌ Error: Unsupported architecture: $ARCH${NC}"
+            return 1
+            ;;
+    esac
+    
+    echo -e "${YELLOW}Installing MongoDB tools v$MONGO_TOOLS_VERSION for $OS-$ARCH...${NC}"
+    
+    # Ensure ~/.local/bin exists and is in PATH
+    mkdir -p "$LOCAL_BIN"
+    ensure_local_bin_in_path
+    
+    # Clean up any existing installation
+    if [[ -d "$MONGO_TOOLS_DIR" ]]; then
+        echo -e "${YELLOW}Removing existing MongoDB tools...${NC}"
+        rm -rf "$MONGO_TOOLS_DIR"
+    fi
+    
+    # Create tools directory
+    mkdir -p "$MONGO_TOOLS_DIR"
+    cd "$MONGO_TOOLS_DIR"
+    
+    # Download mongosh
+    local MONGO_SH_URL="https://downloads.mongodb.com/compass/mongosh-${MONGO_TOOLS_VERSION}-${OS}-${ARCH}.tgz"
+    echo -e "${YELLOW}Downloading mongosh from: $MONGO_SH_URL${NC}"
+    if ! curl -L "$MONGO_SH_URL" | tar -xz; then
+        echo -e "${RED}❌ Error: Failed to download mongosh${NC}"
+        return 1
+    fi
+    
+    # Download mongodb-database-tools (mongodump, mongorestore, etc.)
+    local MONGO_DB_TOOLS_URL="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-${OS}-${ARCH}-${MONGO_TOOLS_VERSION}.tgz"
+    echo -e "${YELLOW}Downloading MongoDB database tools from: $MONGO_DB_TOOLS_URL${NC}"
+    if ! curl -L "$MONGO_DB_TOOLS_URL" | tar -xz; then
+        echo -e "${RED}❌ Error: Failed to download MongoDB database tools${NC}"
+        return 1
+    fi
+    
+    # Find the actual binary directories
+    local MONGO_SH_BIN=$(find . -name "mongosh" -type f | head -1 | xargs dirname)
+    local MONGO_DB_TOOLS_BIN=$(find . -name "mongodump" -type f | head -1 | xargs dirname)
+    
+    echo -e "${YELLOW}Creating symlinks in $LOCAL_BIN...${NC}"
+    
+    # Create symlinks for mongosh
+    if [[ -n "$MONGO_SH_BIN" ]]; then
+        ln -sf "$MONGO_TOOLS_DIR/$MONGO_SH_BIN/mongosh" "$LOCAL_BIN/mongosh"
+        echo -e "${GREEN}✓ mongosh installed${NC}"
+    fi
+    
+    # Create symlinks for database tools
+    if [[ -n "$MONGO_DB_TOOLS_BIN" ]]; then
+        for tool in mongodump mongorestore mongoexport mongoimport mongostat mongotop bsondump; do
+            if [[ -f "$MONGO_TOOLS_DIR/$MONGO_DB_TOOLS_BIN/$tool" ]]; then
+                ln -sf "$MONGO_TOOLS_DIR/$MONGO_DB_TOOLS_BIN/$tool" "$LOCAL_BIN/$tool"
+                echo -e "${GREEN}✓ $tool installed${NC}"
+            fi
+        done
+    fi
+    
+    echo -e "${GREEN}✅ MongoDB tools installed successfully!${NC}"
+    echo -e "${YELLOW}💡 Installed tools:${NC}"
+    ls -la "$LOCAL_BIN" | grep mongo | sed 's/^/  /'
+    echo -e "${YELLOW}💡 These tools are completely independent of Homebrew and Node.js versions.${NC}"
+    
+    return 0
+}
+
+# Install mongosh (alias for install_mongodb_tools for backward compatibility)
 install_mongosh() {
-    echo -e "${BLUE}Installing MongoDB Shell (mongosh)...${NC}"
-    
-    if is_mongosh_installed; then
-        echo -e "${GREEN}✓ mongosh is already installed${NC}"
-        return 0
-    fi
-    
-    # Check if Homebrew is available
-    if ! command -v brew >/dev/null 2>&1; then
-        echo -e "${RED}❌ Error: Homebrew is required but not found. Please install Homebrew first.${NC}"
-        return 1
-    fi
-    
-    # Install mongosh
-    echo -e "${YELLOW}Installing mongosh via Homebrew...${NC}"
-    if brew install mongosh; then
-        echo -e "${GREEN}✓ mongosh installed successfully${NC}"
-        echo -e "${YELLOW}💡 You can now use 'mongosh' to connect to MongoDB instances${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ Error: Failed to install mongosh${NC}"
-        return 1
-    fi
+    install_mongodb_tools
 }
 
-# Upgrade mongosh to latest version
-upgrade_mongosh() {
-    echo -e "${BLUE}Upgrading mongosh...${NC}"
+# Upgrade MongoDB tools to latest version
+upgrade_mongodb_tools() {
+    echo -e "${BLUE}Upgrading MongoDB tools...${NC}"
     
-    if ! is_mongosh_installed; then
-        echo -e "${YELLOW}mongosh is not installed. Installing it first...${NC}"
-        return install_mongosh
+    if ! is_mongodb_tools_installed; then
+        echo -e "${YELLOW}MongoDB tools are not installed. Installing them first...${NC}"
+        return install_mongodb_tools
     fi
     
-    # Check if Homebrew is available
-    if ! command -v brew >/dev/null 2>&1; then
-        echo -e "${RED}❌ Error: Homebrew is required but not found. Please install Homebrew first.${NC}"
-        return 1
-    fi
-    
-    # Upgrade mongosh
-    echo -e "${YELLOW}Upgrading mongosh via Homebrew...${NC}"
-    if brew upgrade mongosh; then
-        echo -e "${GREEN}✓ mongosh upgraded successfully${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ Error: Failed to upgrade mongosh${NC}"
-        return 1
-    fi
+    echo -e "${YELLOW}Reinstalling MongoDB tools to latest version...${NC}"
+    install_mongodb_tools
 }
 
-# Check and upgrade mongosh on demand
-check_upgrade_mongosh() {
-    echo -e "${BLUE}Checking mongosh status...${NC}"
+# Check and upgrade MongoDB tools on demand
+check_upgrade_mongodb_tools() {
+    echo -e "${BLUE}Checking MongoDB tools status...${NC}"
     
-    if ! is_mongosh_installed; then
-        echo -e "${YELLOW}mongosh is not installed.${NC}"
-        read -p "Would you like to install it? (y/N): " -n 1 -r
+    if ! is_mongodb_tools_installed; then
+        echo -e "${YELLOW}MongoDB tools are not installed.${NC}"
+        read -p "Would you like to install them? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            install_mongosh
+            install_mongodb_tools
         else
             echo -e "${YELLOW}Installation cancelled.${NC}"
         fi
@@ -522,20 +604,22 @@ check_upgrade_mongosh() {
     local current_version
     current_version=$(get_mongosh_version)
     
-    echo -e "${YELLOW}Current version: $current_version${NC}"
-    
-    # Check if upgrade is available
-    if brew outdated mongosh >/dev/null 2>&1; then
-        echo -e "${YELLOW}A newer version is available.${NC}"
-        read -p "Would you like to upgrade? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            upgrade_mongosh
-        else
-            echo -e "${YELLOW}Upgrade cancelled.${NC}"
-        fi
+    echo -e "${YELLOW}Current mongosh version: $current_version${NC}"
+    echo -e "${YELLOW}MongoDB tools are installed via direct download.${NC}"
+    echo -e "${YELLOW}To upgrade, run: upgrade_mongodb_tools${NC}"
+}
+
+# Check for brew MongoDB tools conflicts
+check_brew_mongodb_conflict() {
+    if brew ls --versions mongosh mongodb-database-tools >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Warning: MongoDB tools are installed via Homebrew${NC}"
+        echo -e "${YELLOW}   This can cause Node.js dependency conflicts${NC}"
+        echo -e "${YELLOW}   Consider uninstalling: brew uninstall mongosh mongodb-database-tools${NC}"
+        echo -e "${YELLOW}   Then use: install_mongodb_tools${NC}"
+        return 1
     else
-        echo -e "${GREEN}✓ mongosh is up to date${NC}"
+        echo -e "${GREEN}✓ No Homebrew MongoDB tools conflicts detected${NC}"
+        return 0
     fi
 }
 
@@ -566,7 +650,7 @@ is_node_installed_via_homebrew() {
 
 # Get current Node.js version
 get_node_version() {
-    if command -v node >/dev/null 2>&1; then
+    if check_installed node; then
         node --version 2>/dev/null | sed 's/v//'
     else
         echo "not-installed"
@@ -594,7 +678,7 @@ install_nvm() {
     fi
     
     # Check if Homebrew is available
-    if ! command -v brew >/dev/null 2>&1; then
+    if ! check_installed brew; then
         echo -e "${RED}❌ Error: Homebrew is required but not found. Please install Homebrew first.${NC}"
         return 1
     fi
@@ -791,7 +875,103 @@ setup_nodejs_environment_auto() {
 }
 
 # NX Monorepo Tool Management
-# Simple alias approach - follows Shiftsmart's pattern of using local nx versions
+# These functions handle Nx installation and management following Shiftsmart best practices
+
+# Check if Nx is installed globally (problematic)
+is_nx_installed_globally() {
+    command -v nx >/dev/null 2>&1 && [[ "$(which nx)" != *"npx"* ]]
+}
+
+# Check if Nx is installed via Homebrew (problematic)
+is_nx_installed_via_homebrew() {
+    command -v nx >/dev/null 2>&1 && [[ "$(which nx)" == *"homebrew"* ]]
+}
+
+# Get current Nx version (from local project or global)
+get_nx_version() {
+    if check_installed npx; then
+        # Try to get version from local project first
+        if [[ -f "package.json" ]] && grep -q "nx" package.json; then
+            npx nx --version 2>/dev/null | head -n1 | sed 's/.*nx[[:space:]]*//' | sed 's/[[:space:]].*//' | head -n1
+        else
+            echo "not-in-project"
+        fi
+    else
+        echo "npx-not-available"
+    fi
+}
+
+# Check for Nx conflicts
+check_nx_conflict() {
+    if is_nx_installed_via_homebrew; then
+        echo -e "${YELLOW}⚠️  Warning: Nx is installed via Homebrew${NC}"
+        echo -e "${YELLOW}   This can cause conflicts with project-specific Nx versions${NC}"
+        echo -e "${YELLOW}   Consider uninstalling: brew uninstall nx${NC}"
+        echo -e "${YELLOW}   Then use 'npx nx' or install Nx per project instead${NC}"
+        return 1
+    elif is_nx_installed_globally; then
+        echo -e "${YELLOW}⚠️  Warning: Nx is installed globally${NC}"
+        echo -e "${YELLOW}   This can cause conflicts with project-specific Nx versions${NC}"
+        echo -e "${YELLOW}   Consider uninstalling global Nx and use 'npx nx' instead${NC}"
+        return 1
+    else
+        echo -e "${GREEN}✓ No Nx conflicts detected - using npx nx approach${NC}"
+        return 0
+    fi
+}
+
+# Install Nx in a specific project (recommended approach)
+install_nx_in_project() {
+    local project_dir="${1:-.}"
+    
+    if [[ ! -d "$project_dir" ]]; then
+        echo -e "${RED}❌ Error: Project directory '$project_dir' not found${NC}"
+        return 1
+    fi
+    
+    cd "$project_dir"
+    
+    if [[ ! -f "package.json" ]]; then
+        echo -e "${RED}❌ Error: No package.json found in '$project_dir'${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Installing Nx in project: $project_dir${NC}"
+    
+    # Install Nx as a dev dependency
+    if npm install --save-dev nx; then
+        echo -e "${GREEN}✓ Nx installed as dev dependency${NC}"
+        echo -e "${YELLOW}💡 You can now use 'npx nx' or 'npm run nx' in this project${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to install Nx${NC}"
+        return 1
+    fi
+}
+
+# Setup Nx for a new project
+setup_nx_project() {
+    local project_dir="${1:-.}"
+    
+    if [[ ! -d "$project_dir" ]]; then
+        echo -e "${RED}❌ Error: Project directory '$project_dir' not found${NC}"
+        return 1
+    fi
+    
+    cd "$project_dir"
+    
+    echo -e "${BLUE}Setting up Nx project in: $project_dir${NC}"
+    
+    # Initialize Nx workspace
+    if npx create-nx-workspace@latest . --preset=empty --packageManager=npm --nxCloud=skip; then
+        echo -e "${GREEN}✓ Nx workspace initialized${NC}"
+        echo -e "${YELLOW}💡 You can now use 'npx nx' commands in this project${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to initialize Nx workspace${NC}"
+        return 1
+    fi
+}
 
 # macOS Finder settings
 enable_finder_hidden_files() {
@@ -812,6 +992,37 @@ enable_finder_hidden_files() {
     echo -e "${GREEN}✓ Hidden files are now visible in Finder${NC}"
     echo -e "${YELLOW}💡 To hide them again, run: defaults write com.apple.finder AppleShowAllFiles -bool false && killall Finder${NC}"
 }
+
+# Python setup
+setup_python_environment_auto() {
+    echo -e "${BLUE}Setting up Python environment...${NC}"
+    
+    # Install Python if not present
+    if ! check_installed uv; then
+        echo -e "${YELLOW}Installing uv...${NC}"
+        if ! install_uv; then
+            echo -e "${RED}❌ Error: Failed to install uv${NC}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ uv is already installed${NC}"
+    fi
+}
+
+# Install uv
+install_uv() {
+    echo -e "${BLUE}Installing uv v0.9.2...${NC}"
+    
+    # Install uv using the official install script
+    if curl -LsSf https://astral.sh/uv/0.9.2/install.sh | sh; then
+        echo -e "${GREEN}✓ uv v0.9.2 installed successfully${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Error: Failed to install uv${NC}"
+        return 1
+    fi
+}
+
 
 # Shell Completion Management
 # These functions handle completion setup using bash-completion (works for both bash and zsh)
@@ -849,7 +1060,7 @@ setup_completions() {
 
 # Setup kubectl completion using bash-completion
 setup_kubectl_completion() {
-    if command -v kubectl >/dev/null 2>&1; then
+    if check_installed kubectl; then
         echo -e "${YELLOW}Setting up kubectl completion...${NC}"
         
         local completion_file="$(brew --prefix)/etc/bash_completion.d/kubectl"
@@ -905,7 +1116,7 @@ add_completion() {
         return 1
     fi
     
-    if command -v "$tool_name" >/dev/null 2>&1; then
+    if check_installed "$tool_name"; then
         echo -e "${YELLOW}Adding $tool_name completion...${NC}"
         
         local completion_file="$(brew --prefix)/etc/bash_completion.d/$tool_name"
@@ -948,9 +1159,12 @@ alias git-stack-check='check_upgrade_git_stack'
 alias rust-install='install_rust'
 alias git-stack-install='install_git_stack'
 alias git-sweep-install='install_git_sweep'
-alias mongosh-install='install_mongosh'
-alias mongosh-upgrade='upgrade_mongosh'
-alias mongosh-check='check_upgrade_mongosh'
+alias mongodb-tools-install='install_mongodb_tools'
+alias mongodb-tools-upgrade='upgrade_mongodb_tools'
+alias mongodb-tools-check='check_upgrade_mongodb_tools'
+alias mongosh-install='install_mongosh'  # Backward compatibility
+alias mongosh-upgrade='upgrade_mongodb_tools'  # Backward compatibility
+alias mongosh-check='check_upgrade_mongodb_tools'  # Backward compatibility
 alias show-hidden-files='enable_finder_hidden_files'
 alias system-setup='setup_system_auto'
 alias completions-setup='setup_completions'
@@ -962,3 +1176,8 @@ alias nvm-install='install_nvm'
 alias node-install='install_node_via_nvm'
 alias node-install-version='install_node_version'
 alias node-check-conflict='check_homebrew_node_conflict'
+
+# Nx management aliases (following Shiftsmart best practices)
+alias nx-check-conflict='check_nx_conflict'
+alias nx-install-project='install_nx_in_project'
+alias nx-setup-project='setup_nx_project'
