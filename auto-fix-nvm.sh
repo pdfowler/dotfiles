@@ -52,3 +52,4 @@ else
 fi
 
 echo "Current PATH: $PATH"
+
