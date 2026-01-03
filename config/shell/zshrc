@@ -1,6 +1,9 @@
 # Zsh configuration file
 # This file is sourced by interactive zsh shells
 # It integrates with the modular dotfiles configuration system
+# Set DEBUG_SHELL_INIT=1 to enable debug output during shell initialization
+
+[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshrc] Loading .zshrc"
 
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
@@ -11,7 +14,7 @@ ZSH_THEME="robbyrussell"
 # Which plugins would you like to load?
 # Standard plugins can be found in $ZSH/plugins/
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
-plugins=(git)
+# plugins=(git)
 
 # Only load oh-my-zsh if not disabled (e.g., in Cursor Agent context)
 if [[ -z "$DISABLE_OH_MY_ZSH" ]]; then
@@ -26,15 +29,15 @@ fi
 # all configurations are available
 
 # Source cross-shell compatible configurations
-[[ -f ~/.config/shell/env.sh ]] && source ~/.config/shell/env.sh
-[[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
-[[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
+# [[ -f ~/.config/shell/env.sh ]] && source ~/.config/shell/env.sh
+# [[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
+# [[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
 
-# Source aliases (interactive shells only)
-[[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
+# # Source aliases (interactive shells only)
+# [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
 
-# Source private configuration (contains sensitive data like API keys, tokens)
-[[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh
+# # Source private configuration (contains sensitive data like API keys, tokens)
+# [[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh
 
 # Zsh-specific configurations
 # History configuration
@@ -75,3 +78,14 @@ bindkey '^[[1;5D' backward-word
 # Example aliases (uncomment and modify as needed)
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+
+# Arpalus SDK token
+export ARPALUS_REGISTRY_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MmRhMDE3NC05YzFiLTQ4NmQtYmNjNS02MTQzZTQyNDBjNzgiLCJpYXQiOjE3NDgwMjg5NjIsImV4cCI6MTc3OTU2NDk2Mn0._zavQ6AZgSkXoOgzOriN2WjULhnO854XCiI-ePVx0W4
+
+# pnpm
+export PNPM_HOME="/Users/pdfowler/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
