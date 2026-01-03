@@ -77,3 +77,4 @@ The original script was working well after significant effort. Rather than rewri
 The core logic that handles squash-merge detection and rebase operations remains intact and battle-tested.
 
 
+

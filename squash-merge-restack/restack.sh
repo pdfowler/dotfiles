@@ -547,17 +547,60 @@ main_cleanup() {
         # Let gt stack restack decide if restacking is needed
         # It's smarter about detecting conflicts and will skip if not needed
         log_info "Running gt stack restack..."
-        if gt stack restack; then
+        
+        # Capture output to check for conflicts
+        local restack_output
+        local restack_exit_code=0
+        restack_output=$(gt stack restack 2>&1) || restack_exit_code=$?
+        
+        # Check if we're in a rebase state (which indicates a conflict occurred)
+        if git rev-parse --git-dir > /dev/null 2>&1 && [ -d "$(git rev-parse --git-dir)/rebase-merge" ]; then
+            log_error "Repository is in a rebase state - merge conflict detected!"
+            # Check for unmerged files
+            if git diff --name-only --diff-filter=U 2>/dev/null | grep -q .; then
+                log_error "Unmerged files detected:"
+                git diff --name-only --diff-filter=U 2>/dev/null | while read -r file; do
+                    log_error "  - $file"
+                done
+            fi
+            # Show conflict messages from restack output
+            if echo "$restack_output" | grep -qiE "(conflict|Unmerged files|Hit conflict)"; then
+                echo "$restack_output" | grep -iE "(conflict|Unmerged files|Hit conflict)" | while read -r line; do
+                    log_error "  $line"
+                done
+            fi
+            log_error "Stopping to prevent further issues. Repository is in a conflicted state."
+            log_info "To resolve:"
+            log_info "  1. Resolve the listed merge conflicts"
+            log_info "  2. Mark them as resolved with 'gt add .'"
+            log_info "  3. Run 'gt continue' to continue, or 'gt rebase --abort' to cancel"
+            exit 1
+        fi
+        
+        # Check for conflict indicators in output (even if not in rebase state yet)
+        if echo "$restack_output" | grep -qiE "(Hit conflict|Unmerged files)"; then
+            log_error "Merge conflict detected during restack!"
+            echo "$restack_output" | grep -iE "(Hit conflict|Unmerged files)" | while read -r line; do
+                log_error "  $line"
+            done
+            log_error "Stopping to prevent further issues."
+            log_info "To resolve:"
+            log_info "  1. Resolve the listed merge conflicts"
+            log_info "  2. Mark them as resolved with 'gt add .'"
+            log_info "  3. Run 'gt continue' to continue, or 'gt rebase --abort' to cancel"
+            exit 1
+        fi
+        
+        # Check if restack succeeded
+        if [ $restack_exit_code -eq 0 ]; then
             log_success "Successfully restacked"
         else
-            # Check if it failed due to conflicts or just "not needed"
-            local restack_output=$(gt stack restack 2>&1 || true)
+            # Check if it failed because restack wasn't needed
             if echo "$restack_output" | grep -q "does not need to be restacked"; then
                 log_info "Stack is already up to date, no restack needed"
             else
-                log_warning "Restack failed - this may be due to merge conflicts"
-                log_info "You can resolve conflicts manually and run 'gt continue' to continue"
-                log_info "Or run 'gt rebase --abort' to cancel the rebase"
+                log_warning "Restack failed for unknown reason"
+                log_info "Output: $restack_output"
                 log_info "Continuing with sync operation..."
             fi
         fi
