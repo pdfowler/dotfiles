@@ -238,16 +238,40 @@ remove_branch_from_stack() {
     
     log_info "Removing merged branch: $branch_name"
     
-    # If we're currently on the branch being removed, move to parent or main
+    # If we're currently on the branch being removed, navigate away first
     if [[ "$current_branch" == "$branch_name" ]]; then
-        log_info "Currently on $branch_name, navigating to parent..."
+        log_info "Currently on $branch_name, navigating away before deletion..."
         
-        # Try to move up to parent branch
-        if gt branch up 2>/dev/null; then
-            log_success "Moved to parent branch"
+        local navigated=false
+        local nav_output=""
+        
+        # First try: move to child branch (up the stack, away from main)
+        # This is preferred because after deletion, children get reattached to parent,
+        # so we'd still be on a valid branch in the remaining stack
+        nav_output=$(gt branch up 2>&1) || true
+        local new_branch=$(get_current_branch)
+        if [[ "$new_branch" != "$branch_name" && "$new_branch" != "main" ]]; then
+            log_success "Moved to child branch: $new_branch"
+            navigated=true
         else
-            # If no parent, go to main
-            log_info "No parent branch, switching to main"
+            log_info "No child branch available (gt branch up: ${nav_output:-no output})"
+        fi
+        
+        # Second try: move to parent branch (down the stack, toward main)
+        if [[ "$navigated" == "false" ]]; then
+            nav_output=$(gt branch down 2>&1) || true
+            new_branch=$(get_current_branch)
+            if [[ "$new_branch" != "$branch_name" && "$new_branch" != "main" ]]; then
+                log_success "Moved to parent branch: $new_branch"
+                navigated=true
+            else
+                log_info "No parent branch available (gt branch down: ${nav_output:-no output})"
+            fi
+        fi
+        
+        # Last resort: checkout main
+        if [[ "$navigated" == "false" ]]; then
+            log_warning "No child or parent branch available, switching to main"
             git checkout main 2>/dev/null || true
         fi
     fi
@@ -467,6 +491,17 @@ main_cleanup() {
     local bottom_branch
     bottom_branch=$(navigate_to_bottom)
     
+    # Capture original stack branches BEFORE any modifications
+    # This ensures we can find a valid branch for final restack even if we end up on main
+    local original_stack_branches
+    original_stack_branches=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" || echo "")
+    if [ -n "$original_stack_branches" ]; then
+        log_info "Original stack branches:"
+        echo "$original_stack_branches" | while read -r branch; do
+            log_info "  - $branch"
+        done
+    fi
+    
     # Find merge base
     local merge_base
     merge_base=$(find_merge_base)
@@ -526,24 +561,59 @@ main_cleanup() {
     # Always clean up branches that are identical to main or empty
     cleanup_identical_branches
     
-    # Final restack - ensure we're on a tracked branch first
+    # Final restack - ensure we're on a tracked branch first (NOT main)
     log_info "Performing final restack..."
     
-    # Check if current branch is tracked, if not, checkout a tracked branch
-    if ! gt branch info > /dev/null 2>&1; then
-        log_info "Current branch is not tracked, finding a tracked branch to checkout..."
-        local tracked_branch=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" | head -1)
+    local should_restack=true
+    local current_for_restack=$(get_current_branch)
+    
+    # SAFETY CHECK: Never restack from main/master - this would restack ALL branches
+    if [[ "$current_for_restack" == "main" ]] || [[ "$current_for_restack" == "master" ]]; then
+        log_info "Currently on $current_for_restack, need to find a branch from original stack..."
+        
+        local tracked_branch=""
+        while IFS= read -r branch_name; do
+            if [ -z "$branch_name" ]; then
+                continue
+            fi
+            # Clean up branch name (remove any artifacts)
+            branch_name=$(echo "$branch_name" | sed 's/ *(current).*$//' | sed 's/ *(needs restack).*$//' | sed 's/ *$//')
+            
+            # Check if this branch still exists locally
+            if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+                tracked_branch="$branch_name"
+                log_info "Found surviving branch from original stack: $branch_name"
+                break
+            fi
+        done <<< "$original_stack_branches"
         
         if [ -n "$tracked_branch" ]; then
-            log_info "Checking out tracked branch: $tracked_branch"
-            gt branch checkout "$tracked_branch" || log_warning "Failed to checkout tracked branch"
+            log_info "Checking out tracked branch from original stack: $tracked_branch"
+            if gt branch checkout "$tracked_branch"; then
+                current_for_restack="$tracked_branch"
+            else
+                log_warning "Failed to checkout tracked branch, skipping restack"
+                should_restack=false
+            fi
         else
-            log_warning "No tracked branches found, skipping restack"
+            log_success "No branches from original stack remain - cleanup complete, no restack needed"
+            should_restack=false
         fi
+    # Also check if current branch is tracked by gt (not just "not main")
+    elif ! gt branch info > /dev/null 2>&1; then
+        log_warning "Current branch $current_for_restack is not tracked by gt, skipping restack"
+        should_restack=false
     fi
     
-    # Now try restack if we're on a tracked branch
-    if gt branch info > /dev/null 2>&1; then
+    # Final safety check before restack
+    current_for_restack=$(get_current_branch)
+    if [[ "$current_for_restack" == "main" ]] || [[ "$current_for_restack" == "master" ]]; then
+        log_warning "Still on $current_for_restack after navigation attempts - refusing to restack from main"
+        should_restack=false
+    fi
+    
+    # Now try restack if we're on a valid tracked branch
+    if [[ "$should_restack" == "true" ]] && gt branch info > /dev/null 2>&1; then
         # Let gt stack restack decide if restacking is needed
         # It's smarter about detecting conflicts and will skip if not needed
         log_info "Running gt stack restack..."
