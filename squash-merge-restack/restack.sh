@@ -199,6 +199,45 @@ is_branch_in_stack() {
     fi
 }
 
+# Check if branch diverged from main before a given commit
+# Returns 0 if branch existed before the commit (merge-base is before or equal to commit)
+# Returns 1 if branch was created after the commit (merge-base is after commit)
+branch_existed_before_commit() {
+    local branch_name="$1"
+    local commit_sha="$2"
+    
+    # Get the merge-base between branch and main (where branch diverged from main)
+    local main_sha=$(git rev-parse origin/main 2>/dev/null || git rev-parse main)
+    local branch_sha=$(git rev-parse "$branch_name" 2>/dev/null)
+    
+    if [ -z "$branch_sha" ]; then
+        # Branch doesn't exist, can't determine
+        return 1
+    fi
+    
+    local merge_base=$(git merge-base "$branch_sha" "$main_sha" 2>/dev/null)
+    
+    if [ -z "$merge_base" ]; then
+        # Can't determine merge-base, err on side of caution (don't process)
+        return 1
+    fi
+    
+    # If merge_base equals commit_sha, branch existed at merge time
+    if [[ "$merge_base" == "$commit_sha" ]]; then
+        return 0
+    fi
+    
+    # Check if commit_sha is an ancestor of merge_base
+    # If yes, merge_base came AFTER commit_sha, meaning branch was created after merge
+    if git merge-base --is-ancestor "$commit_sha" "$merge_base" 2>/dev/null; then
+        # Branch was created after the merge commit
+        return 1
+    fi
+    
+    # Otherwise, merge_base came before commit_sha, meaning branch existed before merge
+    return 0
+}
+
 # Check if branch has the same SHA as main
 # Always compare against origin/main since that's where merged PRs are
 branch_equals_main() {
@@ -373,6 +412,15 @@ process_merge_commit() {
     # Check if branch is in current stack
     if ! is_branch_in_stack "$local_branch"; then
         # Silently skip - not in our stack
+        return 0
+    fi
+    
+    # SAFETY CHECK: Verify branch existed before the merge commit
+    # If branch diverged from main AFTER the merge commit, it's a new branch
+    # (not the original merged one) and we should skip processing it
+    if ! branch_existed_before_commit "$local_branch" "$commit_sha"; then
+        log_warning "Branch $local_branch appears to have been created after merge commit $commit_sha"
+        log_warning "Skipping processing to avoid deleting a new branch that happens to share the same name"
         return 0
     fi
     
