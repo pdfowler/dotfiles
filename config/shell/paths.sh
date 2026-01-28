@@ -47,60 +47,17 @@ clean_nvm_path() {
 }
 
 # Homebrew setup (macOS)
-# Use timeout protection to prevent hanging when GitHub/network is down
-if [[ -f '/opt/homebrew/bin/brew' ]]; then
-    [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] Setting up Homebrew"
+# Use static paths for performance and reliability in all shell contexts
+if [[ -d '/opt/homebrew' ]]; then
+    [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] Setting up Homebrew (static)"
     
-    # Clean up any stuck brew shellenv processes from previous sessions
-    STUCK_PROCESSES=$(pgrep -f "[b]rew.*shellenv" 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "$STUCK_PROCESSES" -gt 0 ]]; then
-        [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] Cleaning up $STUCK_PROCESSES stuck brew shellenv process(es)"
-        pkill -f "brew.*shellenv" 2>/dev/null || true
-    fi
+    # Static Homebrew environment variables (already exported in env.sh, but ensuring paths here)
+    export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH+:$PATH}"
+    export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
+    export INFOPATH="/opt/homebrew/share/info${INFOPATH+:$INFOPATH}:"
     
-    # Try brew shellenv with 2-second timeout to prevent hanging
-    BREW_ENV=""
-    (
-        BREW_ENV=$(/opt/homebrew/bin/brew shellenv 2>/dev/null)
-        echo "$BREW_ENV" > /tmp/brew_shellenv_output.$$
-    ) &
-    BREW_PID=$!
-    
-    # Wait max 2 seconds
-    for i in {1..20}; do
-        if ! kill -0 $BREW_PID 2>/dev/null; then
-            if [[ -f "/tmp/brew_shellenv_output.$$" ]]; then
-                BREW_ENV=$(cat "/tmp/brew_shellenv_output.$$" 2>/dev/null)
-                rm -f "/tmp/brew_shellenv_output.$$"
-            fi
-            break
-        fi
-        sleep 0.1
-    done
-    
-    # If still running, kill it and use manual paths
-    if kill -0 $BREW_PID 2>/dev/null; then
-        [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] brew shellenv timed out, using manual paths"
-        kill $BREW_PID 2>/dev/null
-        wait $BREW_PID 2>/dev/null
-        rm -f "/tmp/brew_shellenv_output.$$"
-        BREW_ENV=""
-    fi
-    
-    # Use brew shellenv output if available, otherwise use manual paths
-    if [[ -n "$BREW_ENV" ]] && ! echo "$BREW_ENV" | grep -q "Error\|error\|fatal"; then
-        eval "$BREW_ENV"
-        [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] Homebrew shellenv loaded successfully"
-    else
-        # Fallback to manual paths when brew shellenv fails or times out
-        [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] Using manual Homebrew paths (brew shellenv unavailable)"
-        export HOMEBREW_PREFIX="/opt/homebrew"
-        export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
-        export HOMEBREW_REPOSITORY="/opt/homebrew"
-        export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH+:$PATH}"
-        export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
-        export INFOPATH="/opt/homebrew/share/info${INFOPATH+:$INFOPATH}:"
-    fi
+    # Check for stuck brew shellenv processes in the background (optional cleanup)
+    (pgrep -f "[b]rew.*shellenv" >/dev/null && pkill -f "brew.*shellenv" || true) &
 fi
 
 # Local user binaries

@@ -33,6 +33,9 @@ fi
 
 # Development tools
 export HOMEBREW_NO_ENV_HINTS=true
+export HOMEBREW_PREFIX="/opt/homebrew"
+export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
+export HOMEBREW_REPOSITORY="/opt/homebrew"
 export PYENV_ROOT="$HOME/.pyenv"
 
 # NVM configuration (works in all shells)
@@ -62,6 +65,13 @@ export SHIFTSMART_ROOT="$HOME/Development/shiftsmart"
 
 ## NX
 export NX_PARALLEL=10
+
+## GT (Graphite/Charcoal CLI) Source Configuration
+# Controls which version of the gt command to use:
+#   "FORK"    - Use GitHub fork via Homebrew tap (https://github.com/pdfowler/charcoal)
+#   "LOCAL"   - Use local development instance from ~/Development/charcoal
+#   "CHARCOAL" or unset/null - Use default Charcoal installation
+export GT_SOURCE="${GT_SOURCE:-LOCAL}"
 
 # Source private configuration (contains sensitive data like API keys, tokens)
 # This is also sourced in zshenv, but adding here as backup for cross-shell compatibility
