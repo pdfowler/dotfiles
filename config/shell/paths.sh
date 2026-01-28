@@ -57,7 +57,7 @@ if [[ -d '/opt/homebrew' ]]; then
     export INFOPATH="/opt/homebrew/share/info${INFOPATH+:$INFOPATH}:"
     
     # Check for stuck brew shellenv processes in the background (optional cleanup)
-    (pgrep -f "[b]rew.*shellenv" >/dev/null && pkill -f "brew.*shellenv" || true) &
+    (pgrep -f "[b]rew.*shellenv" >/dev/null && pkill -f "brew.*shellenv" || true) &!
 fi
 
 # Local user binaries
