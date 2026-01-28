@@ -56,6 +56,11 @@ setopt AUTO_MENU
 setopt COMPLETE_IN_WORD
 setopt ALWAYS_TO_END
 
+# kubectl completion for zsh
+if command -v kubectl &> /dev/null; then
+    source <(kubectl completion zsh)
+fi
+
 # Directory navigation
 setopt AUTO_PUSHD
 setopt PUSHD_IGNORE_DUPS
