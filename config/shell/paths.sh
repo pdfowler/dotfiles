@@ -48,6 +48,11 @@ clean_nvm_path() {
 
 # Homebrew setup (macOS)
 # Use static paths for performance and reliability in all shell contexts
+# Note: We don't call `brew shellenv` here because:
+# 1. It's slow (can hang if GitHub is down)
+# 2. When HOMEBREW_* vars are already set (in env.sh), it returns nothing
+# 3. GUI apps get their PATH from .zprofile which calls path_helper
+# 4. Terminal shells inherit a good PATH from the system
 if [[ -d '/opt/homebrew' ]]; then
     [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[paths.sh] Setting up Homebrew (static)"
     
@@ -55,9 +60,6 @@ if [[ -d '/opt/homebrew' ]]; then
     export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH+:$PATH}"
     export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
     export INFOPATH="/opt/homebrew/share/info${INFOPATH+:$INFOPATH}:"
-    
-    # Check for stuck brew shellenv processes in the background (optional cleanup)
-    (pgrep -f "[b]rew.*shellenv" >/dev/null && pkill -f "brew.*shellenv" || true) &!
 fi
 
 # Local user binaries

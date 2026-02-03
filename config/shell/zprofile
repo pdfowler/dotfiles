@@ -1,0 +1,27 @@
+# ~/.zprofile - Sourced by login shells (including GUI apps on macOS)
+# This file is critical for GUI applications to get proper PATH on macOS
+# Set DEBUG_SHELL_INIT=1 to enable debug output during shell initialization
+
+[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Starting .zprofile load"
+
+# Call macOS path_helper to set up system PATH
+# This is essential for GUI applications to find commands
+# path_helper reads /etc/paths and /etc/paths.d/* to build the PATH
+if [ -x /usr/libexec/path_helper ]; then
+    [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Calling path_helper"
+    eval `/usr/libexec/path_helper -s`
+fi
+
+# Add Homebrew to PATH explicitly for GUI apps
+# This must happen after path_helper so Homebrew paths take precedence
+if [[ -d '/opt/homebrew' ]]; then
+    [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Adding Homebrew to PATH"
+    export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+fi
+
+# Source the main environment configuration
+# This ensures GUI apps get all the same environment as terminal shells
+[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Sourcing .zshenv for full environment"
+[[ -f "$HOME/.zshenv" ]] && source "$HOME/.zshenv"
+
+[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Completed .zprofile load"
