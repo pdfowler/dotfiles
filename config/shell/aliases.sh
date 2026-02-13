@@ -552,16 +552,32 @@ _gt_check_local() {
     [[ -n "$dir" && -d "$dir" && -f "$dir/apps/cli/dist/src/index.js" ]]
 }
 
+# Run a command with yarn on PATH (sources nvm if needed so yarn from node is available).
+_gt_with_yarn() {
+    if command -v yarn >/dev/null 2>&1; then
+        "$@"
+        return
+    fi
+    if [[ -f "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+        source "${NVM_DIR:-$HOME/.nvm}/nvm.sh" 2>/dev/null
+    fi
+    if command -v yarn >/dev/null 2>&1; then
+        "$@"
+        return
+    fi
+    return 1
+}
+
 _gt_build_local() {
     local dir
     dir=$(_gt_local_dir)
     [[ -n "$dir" ]] || return 1
     [[ -d "$dir" ]] || { echo "Warning: Local charcoal repo not found at $dir" >&2; return 1; }
     _gt_check_local && return 0
-    command -v yarn >/dev/null 2>&1 || { echo "Warning: yarn required to build charcoal" >&2; return 1; }
+    _gt_with_yarn true || { echo "Warning: yarn not found (install yarn or ensure nvm/node is loaded)" >&2; return 1; }
     [[ -f "$dir/yarn.lock" ]] || { echo "Warning: $dir/yarn.lock not found" >&2; return 1; }
     echo "Building local charcoal..." >&2
-    (cd "$dir" && yarn install) && (cd "$dir/apps/cli" && yarn build) || return 1
+    ( _gt_with_yarn true && cd "$dir" && yarn install && cd apps/cli && yarn build ) || return 1
     _gt_check_local || { echo "Warning: Build completed but apps/cli/dist/src/index.js not found" >&2; return 1; }
 }
 
@@ -640,7 +656,7 @@ gt() {
                 return
             fi
         fi
-        echo "Warning: GT_SOURCE=$GT_SOURCE but local charcoal not available, falling back to brew gt" >&2
+        echo "Warning: Local charcoal at $dir not available (need yarn in PATH, then: cd $dir && yarn install && cd apps/cli && yarn build). Using brew gt." >&2
     fi
     _gt_run_installed "$@"
 }
