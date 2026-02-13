@@ -638,7 +638,13 @@ gt() {
         return
     fi
     if [[ "$1" == "stack" && "$2" == "sync" ]]; then
-        "$HOME/Development/dotfiles/squash-merge-restack/restack.sh" "${@:3}"
+        local restack_sh="${DOTFILES_ROOT:-$HOME/Development/dotfiles}/squash-merge-restack/restack.sh"
+        if [[ -f "$restack_sh" ]]; then
+            bash "$restack_sh" "${@:3}"
+        else
+            echo "gt: restack script not found at $restack_sh (set DOTFILES_ROOT in private.sh if dotfiles are elsewhere)" >&2
+            return 1
+        fi
         return
     fi
 
@@ -656,7 +662,11 @@ gt() {
                 return
             fi
         fi
-        echo "Warning: Local charcoal at $dir not available (need yarn in PATH, then: cd $dir && yarn install && cd apps/cli && yarn build). Using brew gt." >&2
+        # Only show fallback message once per session (no spam when using brew gt by choice)
+        if [[ -z "${_GT_FALLBACK_SHOWN:-}" ]]; then
+            echo "Warning: Local charcoal at $dir not available (need yarn in PATH, then: cd $dir && yarn install && cd apps/cli && yarn build). Using brew gt." >&2
+            _GT_FALLBACK_SHOWN=1
+        fi
     fi
     _gt_run_installed "$@"
 }
@@ -670,8 +680,8 @@ network-diagnostics() {
         script_path="$HOME/.config/shell/network-diagnostics.sh"
     elif [[ -n "$DOTFILES_DIR" && -f "$DOTFILES_DIR/config/shell/network-diagnostics.sh" ]]; then
         script_path="$DOTFILES_DIR/config/shell/network-diagnostics.sh"
-    elif [[ -f "$HOME/Development/dotfiles/config/shell/network-diagnostics.sh" ]]; then
-        script_path="$HOME/Development/dotfiles/config/shell/network-diagnostics.sh"
+    elif [[ -f "${DOTFILES_ROOT:-$HOME/Development/dotfiles}/config/shell/network-diagnostics.sh" ]]; then
+        script_path="${DOTFILES_ROOT:-$HOME/Development/dotfiles}/config/shell/network-diagnostics.sh"
     elif [[ -f "./config/shell/network-diagnostics.sh" ]]; then
         script_path="./config/shell/network-diagnostics.sh"
     else
@@ -679,7 +689,7 @@ network-diagnostics() {
         echo "Searched in:"
         echo "  - $HOME/.config/shell/network-diagnostics.sh"
         [[ -n "$DOTFILES_DIR" ]] && echo "  - $DOTFILES_DIR/config/shell/network-diagnostics.sh"
-        echo "  - $HOME/Development/dotfiles/config/shell/network-diagnostics.sh"
+        echo "  - ${DOTFILES_ROOT:-$HOME/Development/dotfiles}/config/shell/network-diagnostics.sh"
         return 1
     fi
     

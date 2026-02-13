@@ -66,6 +66,10 @@ export SHIFTSMART_ROOT="$HOME/Development/shiftsmart"
 ## NX
 export NX_PARALLEL=10
 
+## Dotfiles root (for gt stack sync script, network-diagnostics, etc.)
+# Override in private.sh if your repo is elsewhere, e.g.: export DOTFILES_ROOT="$HOME/Dev/dotfiles"
+export DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/Development/dotfiles}"
+
 ## GT (Graphite/Charcoal CLI) Source
 # Unset or "CHARCOAL" = use brew-installed gt (default).
 # Set to a path = use that local charcoal repo (e.g. in private.sh: export GT_SOURCE="$HOME/Dev/charcoal").
