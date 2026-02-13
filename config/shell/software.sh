@@ -705,10 +705,35 @@ install_node_via_nvm() {
         node_version=$(get_node_version)
         echo -e "${YELLOW}Installed Node.js version: $node_version${NC}"
         
+        ensure_yarn_available
         return 0
     else
         echo -e "${RED}❌ Error: Failed to install Node.js via NVM${NC}"
         return 1
+    fi
+}
+
+# Ensure yarn is available for the current Node (corepack enable, or npm i -g yarn).
+# Call with NVM already sourced so node/npm are on PATH.
+ensure_yarn_available() {
+    if ! command -v node >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v yarn >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Yarn is already available${NC}"
+        return 0
+    fi
+    if command -v corepack >/dev/null 2>&1; then
+        if corepack enable 2>/dev/null; then
+            echo -e "${GREEN}✓ Yarn enabled via corepack${NC}"
+            return 0
+        fi
+    fi
+    echo -e "${YELLOW}Enabling yarn via npm install -g yarn...${NC}"
+    if npm install -g yarn 2>/dev/null; then
+        echo -e "${GREEN}✓ Yarn installed globally${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Could not enable yarn (run 'corepack enable' or 'npm i -g yarn' with nvm loaded)${NC}"
     fi
 }
 
@@ -794,6 +819,7 @@ setup_nodejs_environment() {
         fi
     else
         echo -e "${GREEN}✓ Node.js is already installed via NVM${NC}"
+        ensure_yarn_available
     fi
     
     # Show current status
@@ -837,6 +863,9 @@ setup_nodejs_environment_auto() {
         fi
     else
         echo -e "${GREEN}✓ Node.js is already installed via NVM${NC}"
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        ensure_yarn_available
     fi
     
     echo -e "${GREEN}✅ Node.js environment setup complete!${NC}"
