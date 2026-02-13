@@ -8,6 +8,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Directory containing this file (used to find install-mongodb-tools-direct.sh when sourced from bash)
+[[ -n "${BASH_SOURCE[0]:-}" ]] && _SOFTWARE_SH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Generic command availability check
 # Check if a command is installed and available in PATH
 check_installed() {
@@ -367,6 +370,9 @@ setup_system_auto() {
     # Install git-sweep
     install_git_sweep
     
+    # Install gt (charcoal fork of Graphite CLI) so gt command works when not using LOCAL
+    install_gt_charcoal
+    
     # Install MongoDB tools (direct download, no Homebrew dependencies)
     install_mongodb_tools
     
@@ -379,6 +385,28 @@ setup_system_auto() {
     setup_python_environment_auto
     
     echo -e "${GREEN}✅ Complete system setup finished!${NC}"
+}
+
+# GT (Charcoal/Graphite CLI) - install charcoal fork by default so gt works when not using LOCAL
+# Check for the real binary (brew or PATH), not our gt() function, so we always install if missing.
+install_gt_charcoal() {
+    echo -e "${BLUE}Installing gt (charcoal fork of Graphite CLI)...${NC}"
+    if ! command -v brew >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠ Homebrew not found; skip install. Install gt later: brew install danerwilliams/tap/charcoal${NC}"
+        return 0
+    fi
+    local brew_gt
+    brew_gt="$(brew --prefix 2>/dev/null)/bin/gt"
+    if [[ -x "$brew_gt" ]]; then
+        echo -e "${GREEN}✓ gt (charcoal) is already installed${NC}"
+        return 0
+    fi
+    # Charcoal = open-source fork of Graphite CLI (binary is gt)
+    if brew install danerwilliams/tap/charcoal; then
+        echo -e "${GREEN}✓ gt (charcoal) installed${NC}"
+    else
+        echo -e "${YELLOW}⚠ gt install failed. Install manually: brew install danerwilliams/tap/charcoal${NC}"
+    fi
 }
 
 # Git-sweep Management
@@ -476,95 +504,32 @@ ensure_local_bin_in_path() {
     fi
 }
 
-# Install MongoDB tools via direct download (no Homebrew dependencies)
+# Resolve path to install-mongodb-tools-direct.sh (single source of truth for download/install logic).
+_get_mongodb_tools_script() {
+    if [[ -n "${_SOFTWARE_SH_DIR:-}" && -f "${_SOFTWARE_SH_DIR}/install-mongodb-tools-direct.sh" ]]; then
+        echo "${_SOFTWARE_SH_DIR}/install-mongodb-tools-direct.sh"
+    elif [[ -n "${DOTFILES_DIR:-}" && -f "${DOTFILES_DIR}/config/shell/install-mongodb-tools-direct.sh" ]]; then
+        echo "${DOTFILES_DIR}/config/shell/install-mongodb-tools-direct.sh"
+    elif [[ -f "$HOME/.config/shell/install-mongodb-tools-direct.sh" ]]; then
+        echo "$HOME/.config/shell/install-mongodb-tools-direct.sh"
+    else
+        return 1
+    fi
+}
+
+# Install MongoDB tools via direct download; delegates to install-mongodb-tools-direct.sh.
 install_mongodb_tools() {
-    echo -e "${BLUE}Installing MongoDB tools (direct download)...${NC}"
-    
     if is_mongodb_tools_installed; then
         echo -e "${GREEN}✓ MongoDB tools are already installed${NC}"
         return 0
     fi
-    
-    local LOCAL_BIN="$HOME/.local/bin"
-    local MONGO_TOOLS_DIR="$LOCAL_BIN/mongodb-tools"
-    local MONGO_TOOLS_VERSION="100.9.0"  # Latest stable version
-    local ARCH=$(uname -m)
-    local OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-    
-    # Map architecture names
-    case "$ARCH" in
-        x86_64)
-            ARCH="x86_64"
-            ;;
-        arm64)
-            ARCH="arm64"
-            ;;
-        *)
-            echo -e "${RED}❌ Error: Unsupported architecture: $ARCH${NC}"
-            return 1
-            ;;
-    esac
-    
-    echo -e "${YELLOW}Installing MongoDB tools v$MONGO_TOOLS_VERSION for $OS-$ARCH...${NC}"
-    
-    # Ensure ~/.local/bin exists and is in PATH
-    mkdir -p "$LOCAL_BIN"
-    ensure_local_bin_in_path
-    
-    # Clean up any existing installation
-    if [[ -d "$MONGO_TOOLS_DIR" ]]; then
-        echo -e "${YELLOW}Removing existing MongoDB tools...${NC}"
-        rm -rf "$MONGO_TOOLS_DIR"
-    fi
-    
-    # Create tools directory
-    mkdir -p "$MONGO_TOOLS_DIR"
-    cd "$MONGO_TOOLS_DIR"
-    
-    # Download mongosh
-    local MONGO_SH_URL="https://downloads.mongodb.com/compass/mongosh-${MONGO_TOOLS_VERSION}-${OS}-${ARCH}.tgz"
-    echo -e "${YELLOW}Downloading mongosh from: $MONGO_SH_URL${NC}"
-    if ! curl -L "$MONGO_SH_URL" | tar -xz; then
-        echo -e "${RED}❌ Error: Failed to download mongosh${NC}"
-        return 1
-    fi
-    
-    # Download mongodb-database-tools (mongodump, mongorestore, etc.)
-    local MONGO_DB_TOOLS_URL="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-${OS}-${ARCH}-${MONGO_TOOLS_VERSION}.tgz"
-    echo -e "${YELLOW}Downloading MongoDB database tools from: $MONGO_DB_TOOLS_URL${NC}"
-    if ! curl -L "$MONGO_DB_TOOLS_URL" | tar -xz; then
-        echo -e "${RED}❌ Error: Failed to download MongoDB database tools${NC}"
-        return 1
-    fi
-    
-    # Find the actual binary directories
-    local MONGO_SH_BIN=$(find . -name "mongosh" -type f | head -1 | xargs dirname)
-    local MONGO_DB_TOOLS_BIN=$(find . -name "mongodump" -type f | head -1 | xargs dirname)
-    
-    echo -e "${YELLOW}Creating symlinks in $LOCAL_BIN...${NC}"
-    
-    # Create symlinks for mongosh
-    if [[ -n "$MONGO_SH_BIN" ]]; then
-        ln -sf "$MONGO_TOOLS_DIR/$MONGO_SH_BIN/mongosh" "$LOCAL_BIN/mongosh"
-        echo -e "${GREEN}✓ mongosh installed${NC}"
-    fi
-    
-    # Create symlinks for database tools
-    if [[ -n "$MONGO_DB_TOOLS_BIN" ]]; then
-        for tool in mongodump mongorestore mongoexport mongoimport mongostat mongotop bsondump; do
-            if [[ -f "$MONGO_TOOLS_DIR/$MONGO_DB_TOOLS_BIN/$tool" ]]; then
-                ln -sf "$MONGO_TOOLS_DIR/$MONGO_DB_TOOLS_BIN/$tool" "$LOCAL_BIN/$tool"
-                echo -e "${GREEN}✓ $tool installed${NC}"
-            fi
-        done
-    fi
-    
-    echo -e "${GREEN}✅ MongoDB tools installed successfully!${NC}"
-    echo -e "${YELLOW}💡 Installed tools:${NC}"
-    ls -la "$LOCAL_BIN" | grep mongo | sed 's/^/  /'
-    echo -e "${YELLOW}💡 These tools are completely independent of Homebrew and Node.js versions.${NC}"
-    
-    return 0
+
+    local script
+    script=$(_get_mongodb_tools_script) || { echo -e "${RED}❌ Error: install-mongodb-tools-direct.sh not found${NC}" >&2; return 1; }
+
+    echo -e "${BLUE}Installing MongoDB tools (direct download)...${NC}"
+    bash "$script"
+    return $?
 }
 
 # Install mongosh (alias for install_mongodb_tools for backward compatibility)
@@ -572,17 +537,20 @@ install_mongosh() {
     install_mongodb_tools
 }
 
-# Upgrade MongoDB tools to latest version
+# Upgrade MongoDB tools to latest version (runs direct script so reinstall actually runs).
 upgrade_mongodb_tools() {
     echo -e "${BLUE}Upgrading MongoDB tools...${NC}"
     
+    local script
+    script=$(_get_mongodb_tools_script) || { echo -e "${RED}❌ Error: install-mongodb-tools-direct.sh not found${NC}" >&2; return 1; }
+    
     if ! is_mongodb_tools_installed; then
         echo -e "${YELLOW}MongoDB tools are not installed. Installing them first...${NC}"
-        return install_mongodb_tools
+    else
+        echo -e "${YELLOW}Reinstalling MongoDB tools to latest version...${NC}"
     fi
-    
-    echo -e "${YELLOW}Reinstalling MongoDB tools to latest version...${NC}"
-    install_mongodb_tools
+    bash "$script"
+    return $?
 }
 
 # Check and upgrade MongoDB tools on demand

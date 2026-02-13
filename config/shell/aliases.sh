@@ -506,159 +506,143 @@ alias cleanup-branches-dry='$HOME/.config/shell/cleanup-merged-branches.sh --dry
 alias cleanup-branches-closed='$HOME/.config/shell/cleanup-merged-branches.sh --closed'
 alias cleanup-branches-all='$HOME/.config/shell/cleanup-merged-branches.sh --closed --list'
 
-# GT (Graphite/Charcoal CLI) Source Routing Helpers
-# These functions support routing to different gt command sources based on GT_SOURCE env var
+# GT (Graphite/Charcoal CLI) Source Routing
+# GT_SOURCE unset or "CHARCOAL" = use brew-installed gt. GT_SOURCE = path = use that local repo.
 
-# Get the path to the local charcoal binary
-# Checks common locations for built binaries in a Node.js monorepo structure
+# Echo the local charcoal repo dir if GT_SOURCE is set to a path (or legacy "LOCAL"); else nothing.
+_gt_local_dir() {
+    local s="${GT_SOURCE:-}"
+    [[ -z "$s" || "$s" == "CHARCOAL" ]] && return
+    if [[ "$s" == "LOCAL" ]]; then
+        echo "$HOME/Development/charcoal"
+    elif [[ "$s" == */* || "$s" == ~* ]]; then
+        echo "${s/#\~/$HOME}"
+    fi
+}
+
+# Run installed gt (PATH or Homebrew). Used when GT_SOURCE is default or when local path fails.
+_gt_run_installed() {
+    local brew_gt
+    brew_gt="$(brew --prefix 2>/dev/null)/bin/gt"
+    if [[ -n "$(brew --prefix 2>/dev/null)" && -x "$brew_gt" ]]; then
+        "$brew_gt" "$@"
+        return
+    fi
+    local gt_exe
+    gt_exe=$(whence -p gt 2>/dev/null) || gt_exe=$(type -P gt 2>/dev/null)
+    if [[ -n "$gt_exe" && -x "$gt_exe" ]]; then
+        "$gt_exe" "$@"
+        return
+    fi
+    echo "gt: command not found. Install charcoal fork with: brew install danerwilliams/tap/charcoal" >&2
+    return 127
+}
+
 _gt_get_local_binary() {
-    local charcoal_dir="$HOME/Development/charcoal"
-    local binary_path=""
-    
-    # Check common binary locations (in order of preference)
-    # Primary location: compiled binary from charcoal repo structure
-    if [[ -f "$charcoal_dir/apps/cli/dist/src/index.js" ]]; then
-        binary_path="$charcoal_dir/apps/cli/dist/src/index.js"
-    elif [[ -f "$charcoal_dir/apps/cli/dist/cli.js" ]]; then
-        binary_path="$charcoal_dir/apps/cli/dist/cli.js"
-    elif [[ -f "$charcoal_dir/dist/cli.js" ]]; then
-        binary_path="$charcoal_dir/dist/cli.js"
-    elif [[ -f "$charcoal_dir/node_modules/.bin/gt" ]]; then
-        binary_path="$charcoal_dir/node_modules/.bin/gt"
-    elif [[ -f "$charcoal_dir/apps/cli/node_modules/.bin/gt" ]]; then
-        binary_path="$charcoal_dir/apps/cli/node_modules/.bin/gt"
-    fi
-    
-    echo "$binary_path"
+    local dir
+    dir=$(_gt_local_dir)
+    [[ -z "$dir" ]] && return
+    local bin="$dir/apps/cli/dist/src/index.js"
+    [[ -f "$bin" ]] && echo "$bin"
 }
 
-# Check if local charcoal repo exists and is built
-# Returns 0 if ready to use, 1 otherwise
 _gt_check_local() {
-    local charcoal_dir="$HOME/Development/charcoal"
-    
-    # Check if repo exists
-    if [[ ! -d "$charcoal_dir" ]]; then
-        return 1
-    fi
-    
-    # Check if binary exists
-    local binary_path=$(_gt_get_local_binary)
-    if [[ -z "$binary_path" ]] || [[ ! -f "$binary_path" ]]; then
-        return 1
-    fi
-    
-    return 0
+    local dir
+    dir=$(_gt_local_dir)
+    [[ -n "$dir" && -d "$dir" && -f "$dir/apps/cli/dist/src/index.js" ]]
 }
 
-# Build local charcoal instance if needed
-# Attempts to build using common package managers (yarn, pnpm, npm)
 _gt_build_local() {
-    local charcoal_dir="$HOME/Development/charcoal"
-    
-    if [[ ! -d "$charcoal_dir" ]]; then
-        echo "Warning: Local charcoal repo not found at $charcoal_dir" >&2
-        return 1
-    fi
-    
-    # Check if already built
-    if _gt_check_local; then
-        return 0
-    fi
-    
-    echo "Building local charcoal instance..." >&2
-    
-    # Try to build with available package manager
-    if command -v yarn >/dev/null 2>&1 && [[ -f "$charcoal_dir/yarn.lock" ]]; then
-        (cd "$charcoal_dir" && yarn build) || return 1
-    elif command -v pnpm >/dev/null 2>&1 && [[ -f "$charcoal_dir/pnpm-lock.yaml" ]]; then
-        (cd "$charcoal_dir" && pnpm build) || return 1
-    elif command -v npm >/dev/null 2>&1 && [[ -f "$charcoal_dir/package.json" ]]; then
-        (cd "$charcoal_dir" && npm run build) || return 1
-    else
-        echo "Warning: No suitable package manager found to build charcoal" >&2
-        return 1
-    fi
-    
-    # Verify build succeeded
-    if _gt_check_local; then
-        return 0
-    else
-        echo "Warning: Build completed but binary not found" >&2
-        return 1
-    fi
+    local dir
+    dir=$(_gt_local_dir)
+    [[ -n "$dir" ]] || return 1
+    [[ -d "$dir" ]] || { echo "Warning: Local charcoal repo not found at $dir" >&2; return 1; }
+    _gt_check_local && return 0
+    command -v yarn >/dev/null 2>&1 || { echo "Warning: yarn required to build charcoal" >&2; return 1; }
+    [[ -f "$dir/yarn.lock" ]] || { echo "Warning: $dir/yarn.lock not found" >&2; return 1; }
+    echo "Building local charcoal..." >&2
+    (cd "$dir" && yarn install) && (cd "$dir/apps/cli" && yarn build) || return 1
+    _gt_check_local || { echo "Warning: Build completed but apps/cli/dist/src/index.js not found" >&2; return 1; }
 }
 
-# Graphite stack sync function (replaces missing functionality in Charcoal)
-# Enhanced with GT_SOURCE routing support
-# 
-# GT_SOURCE environment variable controls which version to use:
-#   "FORK"    - Use GitHub fork via Homebrew tap (requires tap setup)
-#   "LOCAL"   - Use local development instance from ~/Development/charcoal (auto-builds if needed)
-#   "CHARCOAL" or unset/null - Use default Charcoal installation
-#
-# Falls back to default with warning if selected source is unavailable
+# Diagnostic: which gt is used and how to switch (gt which).
+_gt_which() {
+    local dir brew_gt path_gt
+    dir=$(_gt_local_dir)
+    brew_gt="$(brew --prefix 2>/dev/null)/bin/gt"
+    path_gt=$(whence -p gt 2>/dev/null) || path_gt=$(type -P gt 2>/dev/null)
+
+    echo "gt which — configuration and diagnostics"
+    echo "========================================"
+    echo ""
+    echo "GT_SOURCE: ${GT_SOURCE:-(unset)}"
+    echo ""
+
+    if [[ -n "$dir" ]]; then
+        echo "Mode: local path (GT_SOURCE is set to a path or LOCAL)"
+        echo "  Resolved dir: $dir"
+        if [[ -d "$dir" ]]; then
+            echo "  Dir exists: yes"
+            if _gt_check_local; then
+                echo "  Built: yes"
+                echo "  Binary: $dir/apps/cli/dist/src/index.js"
+            else
+                echo "  Built: no (run gt to trigger build, or: cd $dir && yarn install && cd apps/cli && yarn build)"
+            fi
+        else
+            echo "  Dir exists: no"
+        fi
+    else
+        echo "Mode: brew / default (GT_SOURCE unset or CHARCOAL)"
+        if [[ -x "$brew_gt" ]]; then
+            echo "  Brew gt: $brew_gt (used when no local path)"
+        else
+            echo "  Brew gt: not found at $brew_gt"
+        fi
+        if [[ -n "$path_gt" && -x "$path_gt" ]]; then
+            echo "  PATH gt: $path_gt"
+        else
+            echo "  PATH gt: (none)"
+        fi
+    fi
+
+    echo ""
+    echo "To use different versions:"
+    echo "  Use brew-installed gt (default):  unset GT_SOURCE   (or: export GT_SOURCE=CHARCOAL)"
+    echo "  Use local charcoal repo:         export GT_SOURCE=\$HOME/Dev/charcoal"
+    echo "  Legacy (default local path):      export GT_SOURCE=LOCAL   (# \$HOME/Development/charcoal)"
+    echo ""
+    echo "Set GT_SOURCE in ~/.config/shell/private.sh for persistence (machine-specific)."
+}
+
+# gt: use brew-installed charcoal by default; if GT_SOURCE is a path, use that local repo (build if needed).
 gt() {
-    # Handle special gt stack sync command (always uses default gt)
+    if [[ "$1" == "which" ]]; then
+        _gt_which
+        return
+    fi
     if [[ "$1" == "stack" && "$2" == "sync" ]]; then
-        # Run the post-squash-merge cleanup script
         "$HOME/Development/dotfiles/squash-merge-restack/restack.sh" "${@:3}"
         return
     fi
-    
-    # Determine which gt source to use based on GT_SOURCE env var
-    local gt_source="${GT_SOURCE:-CHARCOAL}"
-    local use_local=false
-    local use_fork=false
-    local fallback=false
-    
-    case "$gt_source" in
-        LOCAL)
-            if _gt_check_local || _gt_build_local; then
-                use_local=true
-            else
-                echo "Warning: GT_SOURCE=LOCAL but local charcoal not available, falling back to default" >&2
-                fallback=true
+
+    local dir
+    dir=$(_gt_local_dir)
+    if [[ -n "$dir" ]]; then
+        if _gt_check_local || _gt_build_local; then
+            local binary_path=$(_gt_get_local_binary)
+            if [[ -n "$binary_path" ]]; then
+                if [[ "$binary_path" == *.js ]]; then
+                    node "$binary_path" "$@"
+                else
+                    "$binary_path" "$@"
+                fi
+                return
             fi
-            ;;
-        FORK)
-            if command -v gt >/dev/null 2>&1; then
-                use_fork=true
-            else
-                echo "Warning: GT_SOURCE=FORK but gt command not found, falling back to default" >&2
-                fallback=true
-            fi
-            ;;
-        CHARCOAL|"")
-            # Use default
-            ;;
-        *)
-            echo "Warning: Invalid GT_SOURCE='$gt_source', falling back to default. Valid values: FORK, LOCAL, CHARCOAL" >&2
-            fallback=true
-            ;;
-    esac
-    
-    # Execute appropriate gt command
-    if [[ "$use_local" == true ]]; then
-        local binary_path=$(_gt_get_local_binary)
-        if [[ -n "$binary_path" ]]; then
-            # Execute the binary - use node for .js files, direct execution for others
-            if [[ "$binary_path" == *.js ]]; then
-                node "$binary_path" "$@"
-            else
-                "$binary_path" "$@"
-            fi
-        else
-            echo "Error: Local binary path not found" >&2
-            return 1
         fi
-    elif [[ "$use_fork" == true ]] || [[ "$fallback" == false ]]; then
-        # Use default gt command (either FORK mode or CHARCOAL/default mode)
-        command gt "$@"
-    else
-        # Fallback case: try default anyway
-        command gt "$@"
+        echo "Warning: GT_SOURCE=$GT_SOURCE but local charcoal not available, falling back to brew gt" >&2
     fi
+    _gt_run_installed "$@"
 }
 
 # Network diagnostics

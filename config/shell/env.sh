@@ -66,12 +66,9 @@ export SHIFTSMART_ROOT="$HOME/Development/shiftsmart"
 ## NX
 export NX_PARALLEL=10
 
-## GT (Graphite/Charcoal CLI) Source Configuration
-# Controls which version of the gt command to use:
-#   "FORK"    - Use GitHub fork via Homebrew tap (https://github.com/pdfowler/charcoal)
-#   "LOCAL"   - Use local development instance from ~/Development/charcoal
-#   "CHARCOAL" or unset/null - Use default Charcoal installation
-export GT_SOURCE="${GT_SOURCE:-LOCAL}"
+## GT (Graphite/Charcoal CLI) Source
+# Unset or "CHARCOAL" = use brew-installed gt (default).
+# Set to a path = use that local charcoal repo (e.g. in private.sh: export GT_SOURCE="$HOME/Dev/charcoal").
 
 # Source private configuration (contains sensitive data like API keys, tokens)
 # This is also sourced in zshenv, but adding here as backup for cross-shell compatibility

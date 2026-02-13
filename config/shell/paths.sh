@@ -118,15 +118,16 @@ fi
 
 # Python/pyenv setup
 # Check if pyenv is available (either via Homebrew or in PYENV_ROOT/bin)
+# virtualenv-init is optional (pyenv-virtualenv plugin); suppress "no such command" if missing
 if command -v pyenv >/dev/null 2>&1; then
     # pyenv is already in PATH (e.g., via Homebrew), just initialize it
-    eval "$(pyenv init -)" 2>/dev/null || true
-    eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+    eval "$(pyenv init - 2>/dev/null)" || true
+    eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
 elif [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
     # pyenv is in PYENV_ROOT/bin but not in PATH, add it and initialize
     export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init -)" 2>/dev/null || true
-    eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+    eval "$(pyenv init - 2>/dev/null)" || true
+    eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
 fi
 
 # Google Cloud SDK

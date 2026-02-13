@@ -103,6 +103,7 @@ create_symlink "$DOTFILES_DIR/config/shell/env.sh" "$HOME/.config/shell/env.sh"
 create_symlink "$DOTFILES_DIR/config/shell/paths.sh" "$HOME/.config/shell/paths.sh"
 create_symlink "$DOTFILES_DIR/config/shell/aliases.sh" "$HOME/.config/shell/aliases.sh"
 create_symlink "$DOTFILES_DIR/config/shell/software.sh" "$HOME/.config/shell/software.sh"
+create_symlink "$DOTFILES_DIR/config/shell/install-mongodb-tools-direct.sh" "$HOME/.config/shell/install-mongodb-tools-direct.sh"
 create_symlink "$DOTFILES_DIR/config/shell/cleanup-merged-branches.sh" "$HOME/.config/shell/cleanup-merged-branches.sh"
 
 # Create symlinks for shell-specific files

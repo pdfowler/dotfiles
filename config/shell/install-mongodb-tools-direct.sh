@@ -1,12 +1,13 @@
 #!/bin/bash
 # Install MongoDB tools without Homebrew dependencies
-# This script downloads and installs MongoDB tools directly from MongoDB
+# mongosh: latest from GitHub (2.x), macOS assets are .zip
+# mongodb-database-tools: from fastdl.mongodb.org (100.x)
 
 set -e
 
 LOCAL_BIN="$HOME/.local/bin"
 MONGO_TOOLS_DIR="$LOCAL_BIN/mongodb-tools"
-MONGO_TOOLS_VERSION="100.9.0"  # Latest stable version
+MONGO_DB_TOOLS_VERSION="100.14.1"  # mongodump/mongorestore etc.
 ARCH=$(uname -m)
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
@@ -23,8 +24,6 @@ case "$ARCH" in
         exit 1
         ;;
 esac
-
-echo "Installing MongoDB tools v$MONGO_TOOLS_VERSION for $OS-$ARCH..."
 
 # Ensure ~/.local/bin exists and is in PATH
 mkdir -p "$LOCAL_BIN"
@@ -44,15 +43,49 @@ fi
 mkdir -p "$MONGO_TOOLS_DIR"
 cd "$MONGO_TOOLS_DIR"
 
-# Download mongosh
-MONGO_SH_URL="https://downloads.mongodb.com/compass/mongosh-${MONGO_TOOLS_VERSION}-${OS}-${ARCH}.tgz"
-echo "Downloading mongosh from: $MONGO_SH_URL"
-curl -L "$MONGO_SH_URL" | tar -xz
+# mongosh: resolve latest from GitHub, download .zip for darwin
+GH_JSON=$(curl -sS "https://api.github.com/repos/mongodb-js/mongosh/releases/latest")
+if command -v jq >/dev/null 2>&1; then
+    MONGO_SH_VERSION=$(printf '%s' "$GH_JSON" | jq -r '.tag_name | ltrimstr("v")')
+else
+    MONGO_SH_VERSION=$(printf '%s' "$GH_JSON" | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+fi
+[[ -z "$MONGO_SH_VERSION" || "$MONGO_SH_VERSION" == "null" ]] && MONGO_SH_VERSION="2.7.0"
+GH_ARCH="$ARCH"
+[[ "$GH_ARCH" == "x86_64" ]] && GH_ARCH="x64"
+MONGO_SH_URL="https://github.com/mongodb-js/mongosh/releases/download/v${MONGO_SH_VERSION}/mongosh-${MONGO_SH_VERSION}-darwin-${GH_ARCH}.zip"
+echo "Downloading mongosh v${MONGO_SH_VERSION} from: $MONGO_SH_URL"
+curl -L -o mongosh.zip "$MONGO_SH_URL"
+unzip -q -o mongosh.zip && rm -f mongosh.zip
 
-# Download mongodb-database-tools (mongodump, mongorestore, etc.)
-MONGO_DB_TOOLS_URL="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-${OS}-${ARCH}-${MONGO_TOOLS_VERSION}.tgz"
-echo "Downloading MongoDB database tools from: $MONGO_DB_TOOLS_URL"
-curl -L "$MONGO_DB_TOOLS_URL" | tar -xz
+# mongodb-database-tools: tgz from fastdl (often 403); fallback to Homebrew
+MONGO_DB_TOOLS_URL="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-${OS}-${ARCH}-${MONGO_DB_TOOLS_VERSION}.tgz"
+DB_TOOLS_TGZ="$MONGO_TOOLS_DIR/db-tools.tgz"
+echo "Downloading MongoDB database tools v${MONGO_DB_TOOLS_VERSION} from: $MONGO_DB_TOOLS_URL"
+if curl -sSfL -o "$DB_TOOLS_TGZ" "$MONGO_DB_TOOLS_URL" && [[ -s "$DB_TOOLS_TGZ" ]]; then
+    SIZE=$(stat -f%z "$DB_TOOLS_TGZ" 2>/dev/null || stat -c%s "$DB_TOOLS_TGZ" 2>/dev/null)
+    if [[ -n "$SIZE" && "$SIZE" -gt 1000 ]] && tar -xzf "$DB_TOOLS_TGZ"; then
+        rm -f "$DB_TOOLS_TGZ"
+    else
+        rm -f "$DB_TOOLS_TGZ"
+        if command -v brew >/dev/null 2>&1; then
+            echo "Direct download blocked (403). Installing MongoDB database tools via Homebrew..."
+            brew tap mongodb/brew 2>/dev/null || true
+            brew install mongodb-database-tools || true
+        else
+            echo "⚠ Direct download blocked. Install manually: https://www.mongodb.com/try/download/database-tools"
+        fi
+    fi
+else
+    rm -f "$DB_TOOLS_TGZ"
+    if command -v brew >/dev/null 2>&1; then
+        echo "Direct download blocked (403). Installing MongoDB database tools via Homebrew..."
+        brew tap mongodb/brew 2>/dev/null || true
+        brew install mongodb-database-tools || true
+    else
+        echo "⚠ Direct download blocked. Install manually: https://www.mongodb.com/try/download/database-tools"
+    fi
+fi
 
 # Find the actual binary directories
 MONGO_SH_BIN=$(find . -name "mongosh" -type f | head -1 | xargs dirname)
