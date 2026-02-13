@@ -139,9 +139,16 @@ echo -e "${GREEN}✓ Git aliases configured${NC}"
 echo -e "${GREEN}✅ Dotfiles installation complete!${NC}"
 echo -e "${YELLOW}💡 Don't forget to:${NC}"
 echo "  1. Add sensitive data to ~/.config/shell/private.sh (all 'private' files are git ignored)"
-echo "  2. Run 'update' or restart this and other terminal sessions"
 if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
-    echo "  3. Initialize git repo: cd $DOTFILES_DIR && git init"
+    echo "  2. Initialize git repo: cd $DOTFILES_DIR && git init"
+fi
+echo ""
+# Reload shell config in this session (update is from aliases.sh, already sourced by install_packages)
+if type update &>/dev/null; then
+    update
+    echo -e "${YELLOW}💡 Restart other terminal sessions to pick up changes there too.${NC}"
+else
+    echo -e "${YELLOW}💡 Run 'source ~/.zshenv' and 'source ~/.zshrc' (or restart) to pick up changes.${NC}"
 fi
 
 echo -e "${YELLOW}🐍 Python Virtual Environment:${NC}"
