@@ -185,6 +185,28 @@ find_local_branch() {
     fi
 }
 
+# Get list of branch names in current stack (one per line, excluding main)
+get_stack_branches() {
+    gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" || echo ""
+}
+
+# Get one other branch in the same stack we can switch to (excluding current and main).
+# Used when gt branch up/down is ambiguous (multiple children) or main is in another worktree.
+get_another_stack_branch() {
+    local exclude_branch="$1"
+    local stack_branches
+    stack_branches=$(get_stack_branches)
+    while IFS= read -r b; do
+        [[ -z "$b" ]] && continue
+        b=$(echo "$b" | sed 's/ *(current).*$//' | sed 's/ *(needs restack).*$//' | sed 's/ *$//')
+        [[ "$b" == "$exclude_branch" ]] && continue
+        if git show-ref --verify --quiet "refs/heads/$b"; then
+            echo "$b"
+            return
+        fi
+    done <<< "$stack_branches"
+}
+
 # Check if branch is part of current stack
 is_branch_in_stack() {
     local branch_name="$1"
@@ -284,35 +306,67 @@ remove_branch_from_stack() {
         local navigated=false
         local nav_output=""
         
-        # First try: move to child branch (up the stack, away from main)
-        # This is preferred because after deletion, children get reattached to parent,
-        # so we'd still be on a valid branch in the remaining stack
-        nav_output=$(gt branch up 2>&1) || true
+        # First try: move to child branch (up the stack, away from main).
+        # Use </dev/null so "Multiple branches found at the same level" prompt doesn't block.
+        nav_output=$(gt branch up 2>&1 </dev/null) || true
         local new_branch=$(get_current_branch)
         if [[ "$new_branch" != "$branch_name" && "$new_branch" != "main" ]]; then
             log_success "Moved to child branch: $new_branch"
             navigated=true
         else
-            log_info "No child branch available (gt branch up: ${nav_output:-no output})"
+            log_info "No single child branch (gt branch up: ${nav_output:-no output})"
         fi
         
         # Second try: move to parent branch (down the stack, toward main)
         if [[ "$navigated" == "false" ]]; then
-            nav_output=$(gt branch down 2>&1) || true
+            nav_output=$(gt branch down 2>&1 </dev/null) || true
             new_branch=$(get_current_branch)
             if [[ "$new_branch" != "$branch_name" && "$new_branch" != "main" ]]; then
                 log_success "Moved to parent branch: $new_branch"
                 navigated=true
             else
-                log_info "No parent branch available (gt branch down: ${nav_output:-no output})"
+                log_info "No single parent branch (gt branch down: ${nav_output:-no output})"
             fi
         fi
         
-        # Last resort: checkout main
+        # Third: when up/down are ambiguous (e.g. two child stacks with same parent), switch to any other stack branch
+        if [[ "$navigated" == "false" ]]; then
+            local other_branch
+            other_branch=$(get_another_stack_branch "$branch_name")
+            if [[ -n "$other_branch" ]]; then
+                if git checkout "$other_branch" 2>/dev/null || git switch "$other_branch" 2>/dev/null; then
+                    log_success "Moved to other stack branch: $other_branch (multiple branches at same level)"
+                    navigated=true
+                fi
+            fi
+        fi
+        
+        # Last resort: checkout main (may fail if main is in another worktree)
         if [[ "$navigated" == "false" ]]; then
             log_warning "No child or parent branch available, switching to main"
-            git checkout main 2>/dev/null || true
+            if ! (git checkout main 2>/dev/null || git switch main 2>/dev/null); then
+                other_branch=$(get_another_stack_branch "$branch_name")
+                if [[ -n "$other_branch" ]]; then
+                    if git checkout "$other_branch" 2>/dev/null || git switch "$other_branch" 2>/dev/null; then
+                        log_success "Main is in another worktree; moved to stack branch: $other_branch"
+                        navigated=true
+                    fi
+                fi
+            else
+                navigated=true
+            fi
         fi
+        
+        if [[ "$navigated" == "false" ]]; then
+            log_error "Could not navigate off branch $branch_name (cannot delete current branch). Try checking out another branch manually and re-run."
+            return 1
+        fi
+    fi
+    
+    current_branch=$(get_current_branch)
+    if [[ "$current_branch" == "$branch_name" ]]; then
+        log_error "Still on $branch_name; refusing to delete current branch"
+        return 1
     fi
     
     # Use gt branch delete which properly handles children (reattaches them to parent)
@@ -334,7 +388,8 @@ cleanup_identical_branches() {
     log_info "Checking for branches identical to main or empty..."
     
     # Get all branches in current stack (use --stack to scope to current stack only)
-    local stack_branches=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" || echo "")
+    local stack_branches
+    stack_branches=$(get_stack_branches)
     
     if [ -z "$stack_branches" ]; then
         log_info "No branches found in stack to check"
@@ -542,7 +597,7 @@ main_cleanup() {
     # Capture original stack branches BEFORE any modifications
     # This ensures we can find a valid branch for final restack even if we end up on main
     local original_stack_branches
-    original_stack_branches=$(gt log --stack --quiet 2>/dev/null | grep -E "[[:space:]]*◯|[[:space:]]*◉" | sed 's/^[[:space:]]*[◯◉][[:space:]]*//' | sed 's/^[[:space:]]*│[[:space:]]*[◯◉][[:space:]]*//' | sed 's/[[:space:]]*│.*$//' | sed 's/[[:space:]]*(current).*$//' | sed 's/[[:space:]]*(needs restack).*$//' | sed 's/[[:space:]]*$//' | grep -v "^main$" || echo "")
+    original_stack_branches=$(get_stack_branches)
     if [ -n "$original_stack_branches" ]; then
         log_info "Original stack branches:"
         echo "$original_stack_branches" | while read -r branch; do
