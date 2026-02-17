@@ -19,9 +19,4 @@ if [[ -d '/opt/homebrew' ]]; then
     export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 fi
 
-# Source the main environment configuration
-# This ensures GUI apps get all the same environment as terminal shells
-[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Sourcing .zshenv for full environment"
-[[ -f "$HOME/.zshenv" ]] && source "$HOME/.zshenv"
-
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zprofile] Completed .zprofile load"

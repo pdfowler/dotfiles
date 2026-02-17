@@ -28,16 +28,9 @@ fi
 # but we source them again here for interactive shells to ensure
 # all configurations are available
 
-# Source cross-shell compatible configurations
-# [[ -f ~/.config/shell/env.sh ]] && source ~/.config/shell/env.sh
-# [[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
-# [[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
-
-# # Source aliases (interactive shells only)
-# [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
-
-# # Source private configuration (contains sensitive data like API keys, tokens)
-# [[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh
+# Source interactive-only functions and aliases.
+[[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
+[[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
 
 # Zsh-specific configurations
 # History configuration

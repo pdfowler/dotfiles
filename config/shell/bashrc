@@ -6,5 +6,7 @@
 [[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
 
 # Only load aliases in interactive shells (they can cause issues in scripts)
-[[ -n "$PS1" ]] && [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh 
-. "$HOME/.cargo/env"
+[[ $- == *i* ]] && [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
+
+# Interactive-only Cargo init (PATH is already handled in paths.sh)
+[[ $- == *i* ]] && [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"

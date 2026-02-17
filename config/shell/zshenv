@@ -4,32 +4,12 @@
 
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Starting .zshenv load"
 
-# Source cross-shell compatible configurations
+# Source core cross-shell configuration.
+# Keep this file lightweight: it is sourced for every zsh invocation.
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing env.sh"
 [[ -f ~/.config/shell/env.sh ]] && source ~/.config/shell/env.sh
 
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing paths.sh"
 [[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
-
-[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing software.sh"
-[[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
-
-# Fix NVM hook PATH issues before any hooks run
-[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Calling fix_nvm_hook_path"
-fix_nvm_hook_path
-
-# Source private configuration (contains sensitive data like API keys, tokens)
-[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing private.sh"
-[[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh
-
-# Only load aliases in interactive shells (they can cause issues in scripts)
-# Also ensure we're in an interactive shell before loading aliases
-if [[ -n "$PS1" ]] && [[ -n "$ZSH_VERSION" ]]; then
-    [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing aliases.sh"
-    [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
-fi 
-
-[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing cargo/env"
-. "$HOME/.cargo/env"
 
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Completed .zshenv load"

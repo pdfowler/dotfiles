@@ -12,6 +12,17 @@ if ! command -v tr >/dev/null 2>&1 || ! command -v tail >/dev/null 2>&1 || ! com
     export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 fi
 
+# Cross-shell interactive check
+is_interactive_shell() {
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        [[ -o interactive ]]
+    elif [[ -n "${BASH_VERSION:-}" ]]; then
+        [[ $- == *i* ]]
+    else
+        false
+    fi
+}
+
 # Safe NVM loading function
 safe_load_nvm() {
     # Ensure core utilities are available
@@ -69,24 +80,24 @@ fi
 
 # Node.js and NVM setup (following Shiftsmart best practices)
 # Only load NVM if core utilities are available and NVM is properly installed
-if [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]; then
+if is_interactive_shell && [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]; then
     # Clean up any existing NVM paths first
     clean_nvm_path
-    
+
     # Ensure core utilities are available before loading NVM
     export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
-    
+
     # Load NVM safely (following Shiftsmart's approach)
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-    
+
     # Auto-switch to .nvmrc version if available (following Shiftsmart's emphasis on auto-switching)
     # This is critical for project-specific Node.js versions
     if [[ -f ".nvmrc" ]] && command -v nvm >/dev/null 2>&1; then
         nvm use >/dev/null 2>&1 || true  # Silently fail if version not installed
     fi
-    
+
     # Auto-fix NVM PATH corruption issues on startup
     # This prevents "command not found: tr/tail/head/sed" errors
     auto_fix_nvm_path() {
@@ -97,21 +108,21 @@ if [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]; then
                 missing_utils+=("$util")
             fi
         done
-        
+
         if [[ ${#missing_utils[@]} -gt 0 ]]; then
             # Restore essential system paths that NVM might have removed
             export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
-            
+
             # Clean up any duplicate or problematic NVM paths
             export PATH=$(echo "$PATH" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | sed 's/:$//')
-            
+
             # Ensure NVM paths are properly appended (not replacing system paths)
             if [[ -n "${NVM_BIN:-}" ]] && [[ -d "$NVM_BIN" ]]; then
                 export PATH="$PATH:$NVM_BIN"
             fi
         fi
     }
-    
+
     # Run the auto-fix
     auto_fix_nvm_path
 fi
@@ -119,11 +130,11 @@ fi
 # Python/pyenv setup
 # Check if pyenv is available (either via Homebrew or in PYENV_ROOT/bin)
 # virtualenv-init is optional (pyenv-virtualenv plugin); suppress "no such command" if missing
-if command -v pyenv >/dev/null 2>&1; then
+if is_interactive_shell && command -v pyenv >/dev/null 2>&1; then
     # pyenv is already in PATH (e.g., via Homebrew), just initialize it
     eval "$(pyenv init - 2>/dev/null)" || true
     eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
-elif [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
+elif is_interactive_shell && [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
     # pyenv is in PYENV_ROOT/bin but not in PATH, add it and initialize
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init - 2>/dev/null)" || true
@@ -131,17 +142,17 @@ elif [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
 fi
 
 # Google Cloud SDK
-if [[ -f '/Users/pdfowler/Downloads/google-cloud-sdk/path.zsh.inc' ]]; then
-    source '/Users/pdfowler/Downloads/google-cloud-sdk/path.zsh.inc'
+if [[ -d '/Users/pdfowler/Downloads/google-cloud-sdk/bin' ]]; then
+    export PATH="/Users/pdfowler/Downloads/google-cloud-sdk/bin:$PATH"
 fi
 
 # Google Cloud completion (interactive shells only)
-if [[ -n "$PS1" ]] && [[ -f '/Users/pdfowler/Downloads/google-cloud-sdk/completion.zsh.inc' ]]; then
+if is_interactive_shell && [[ -f '/Users/pdfowler/Downloads/google-cloud-sdk/completion.zsh.inc' ]]; then
     source '/Users/pdfowler/Downloads/google-cloud-sdk/completion.zsh.inc'
 fi
 
 # Load bash-completion (works for both bash and zsh)
-if [[ -n "$PS1" ]]; then
+if is_interactive_shell; then
     # bash-completion is automatically loaded by oh-my-zsh in zsh
     # For bash, we can load it manually if needed
     if [[ -n "$BASH_VERSION" ]] && [[ -f "$(brew --prefix)/etc/bash_completion" ]]; then
