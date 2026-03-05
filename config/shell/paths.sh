@@ -160,10 +160,5 @@ if is_interactive_shell; then
     fi
 fi
 
-# Rust/Cargo binaries
-if [[ -d "$HOME/.cargo/bin" ]]; then
-    export PATH="$HOME/.cargo/bin:$PATH"
-fi
-
 # Development tools (add your custom paths here)
 # export PATH="$HOME/bin:$PATH" 
