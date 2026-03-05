@@ -35,6 +35,9 @@ setup_system_auto() {
     # Install gt (charcoal fork of Graphite CLI) so gt command works when not using LOCAL
     install_gt_charcoal
     
+    # Install Powerlevel10k theme for zsh (used by config/shell/zshrc)
+    install_powerlevel10k
+    
     # Install MongoDB tools (direct download, no Homebrew dependencies)
     install_mongodb_tools
     
@@ -47,6 +50,27 @@ setup_system_auto() {
     setup_python_environment_auto
     
     echo -e "${GREEN}✅ Complete system setup finished!${NC}"
+}
+
+# Powerlevel10k - zsh theme (powerline style with icons, time, duration)
+# Requires Nerd Font for icons. Config: config/shell/zsh/.p10k.zsh
+install_powerlevel10k() {
+    echo -e "${BLUE}Installing Powerlevel10k theme...${NC}"
+    local zsh_custom="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+    local p10k_dir="$zsh_custom/themes/powerlevel10k"
+    if [[ -d "$p10k_dir/.git" ]]; then
+        echo -e "${GREEN}✓ Powerlevel10k is already installed${NC}"
+        return 0
+    fi
+    if [[ ! -d "$zsh_custom" ]]; then
+        echo -e "${YELLOW}⚠ Oh-My-Zsh custom dir not found ($zsh_custom). Install Oh-My-Zsh first, then re-run installer.${NC}"
+        return 0
+    fi
+    if git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$p10k_dir" 2>/dev/null; then
+        echo -e "${GREEN}✓ Powerlevel10k installed${NC}"
+    else
+        echo -e "${YELLOW}⚠ Powerlevel10k clone failed. Install manually: git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $p10k_dir${NC}"
+    fi
 }
 
 # GT (Charcoal/Graphite CLI) - install charcoal fork by default so gt works when not using LOCAL

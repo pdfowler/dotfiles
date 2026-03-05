@@ -112,6 +112,7 @@ create_symlink "$DOTFILES_DIR/config/shell/zshenv" "$HOME/.zshenv"
 create_symlink "$DOTFILES_DIR/config/shell/zprofile" "$HOME/.zprofile"
 create_symlink "$DOTFILES_DIR/config/shell/zshrc" "$HOME/.zshrc"
 create_symlink "$DOTFILES_DIR/config/shell/bashrc" "$HOME/.bashrc"
+create_symlink "$DOTFILES_DIR/config/shell/zsh/.p10k.zsh" "$HOME/.p10k.zsh"
 
 # Optional: Create a private config file if it doesn't exist
 if [[ ! -f ~/.config/shell/private.sh ]]; then
@@ -125,6 +126,17 @@ if [[ ! -f ~/.config/shell/private.sh ]]; then
 # export API_KEY="your_api_key_here"
 EOF
     echo -e "${GREEN}✓ Created ~/.config/shell/private.sh${NC}"
+fi
+
+# Optional: Machine-specific config (OrbStack, local overrides; not in repo)
+if [[ ! -f ~/.config/shell/local.sh ]]; then
+    echo -e "${YELLOW}Creating local (machine-specific) config file...${NC}"
+    cat > ~/.config/shell/local.sh << 'EOF'
+# Machine-specific configuration (not version controlled)
+# Add computer-specific overrides here, e.g.:
+# source ~/.orbstack/shell/init.zsh  # OrbStack
+EOF
+    echo -e "${GREEN}✓ Created ~/.config/shell/local.sh${NC}"
 fi
 
 install_packages

@@ -1,5 +1,7 @@
 HOME_CONFIG/*
 *private*
+# Machine-specific (created by install.sh in ~/.config/shell/, not in repo)
+config/shell/local.sh
 
 # Note: Completions are now handled by bash-completion system
 # Files are stored in $(brew --prefix)/etc/bash_completion.d/

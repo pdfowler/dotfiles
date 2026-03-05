@@ -7,6 +7,3 @@
 
 # Only load aliases in interactive shells (they can cause issues in scripts)
 [[ $- == *i* ]] && [[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
-
-# Interactive-only Cargo init (PATH is already handled in paths.sh)
-[[ $- == *i* ]] && [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"

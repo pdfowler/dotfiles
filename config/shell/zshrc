@@ -3,22 +3,30 @@
 # It integrates with the modular dotfiles configuration system
 # Set DEBUG_SHELL_INIT=1 to enable debug output during shell initialization
 
+# Powerlevel10k instant prompt (must stay near top; see p10k docs)
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshrc] Loading .zshrc"
 
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
-# Set name of the theme to load
-ZSH_THEME="robbyrussell"
+# Powerlevel10k theme (config: config/shell/zsh/.p10k.zsh, symlinked to ~/.p10k.zsh)
+ZSH_THEME="powerlevel10k/powerlevel10k"
 
-# Which plugins would you like to load?
-# Standard plugins can be found in $ZSH/plugins/
-# Custom plugins may be added to $ZSH_CUSTOM/plugins/
-# plugins=(git)
+# Plugins (git for branch in prompt; history-substring-search for key bindings below)
+plugins=(git history-substring-search)
 
 # Only load oh-my-zsh if not disabled (e.g., in Cursor Agent context)
 if [[ -z "$DISABLE_OH_MY_ZSH" ]]; then
     source $ZSH/oh-my-zsh.sh
+fi
+
+# Apply Powerlevel10k config from dotfiles (same on every machine)
+if [[ -f "${DOTFILES_ROOT:-$HOME/Development/dotfiles}/config/shell/zsh/.p10k.zsh" ]]; then
+  source "${DOTFILES_ROOT:-$HOME/Development/dotfiles}/config/shell/zsh/.p10k.zsh"
 fi
 
 # User configuration
@@ -77,13 +85,7 @@ bindkey '^[[1;5D' backward-word
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-# Arpalus SDK token
-export ARPALUS_REGISTRY_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MmRhMDE3NC05YzFiLTQ4NmQtYmNjNS02MTQzZTQyNDBjNzgiLCJpYXQiOjE3NDgwMjg5NjIsImV4cCI6MTc3OTU2NDk2Mn0._zavQ6AZgSkXoOgzOriN2WjULhnO854XCiI-ePVx0W4
+# Secrets and machine-specific env (tokens, PNPM_HOME, etc.) go in ~/.config/shell/private.sh
 
-# pnpm
-export PNPM_HOME="/Users/pdfowler/Library/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
-esac
-# pnpm end
+# Machine-specific config (not in repo): OrbStack, local overrides, etc.
+[[ -f ~/.config/shell/local.sh ]] && source ~/.config/shell/local.sh
