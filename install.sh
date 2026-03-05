@@ -80,7 +80,7 @@ install_packages() {
         echo -e "${YELLOW}Warning: aliases.sh not found, skipping global venv setup${NC}"
     fi
 
-    # Install Rust/Cargo, git-stack, and configure system
+    # Install Common System Tools
     echo -e "${YELLOW}Setting up development tools and system configuration...${NC}"
     if [[ -f "$DOTFILES_DIR/config/shell/software.sh" ]]; then
         # Source the software functions
