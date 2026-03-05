@@ -54,28 +54,17 @@ install_packages() {
         cursor-agent update > /dev/null 2>&1
     fi
 
-    # install setuptools to avoid nodegyp/unixdgram errors
-    if ! command -v pip3 >/dev/null 2>&1; then
-        echo -e "${YELLOW}Installing pip3...${NC}"
-        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-        python3 get-pip.py
-        rm get-pip.py
-    fi
-
-    # Check if setuptools is available (it's a Python package, not a command)
-    if ! python3 -c "import setuptools" 2>/dev/null; then
-        echo -e "${YELLOW}Installing setuptools...${NC}"
-        # Temporarily disable virtualenv requirement for this installation
-        PIP_REQUIRE_VIRTUALENV=false pip3 install setuptools
-    fi
-
-    # Set up global virtual environment for tools like uv/uvx
+    # Set up global virtual environment first (avoids PEP 668 / externally-managed system Python)
     echo -e "${YELLOW}Setting up global virtual environment...${NC}"
     if [[ -f "$DOTFILES_DIR/config/shell/aliases.sh" ]]; then
-        # Source the aliases to get the create_global_venv function
         source "$DOTFILES_DIR/config/shell/aliases.sh"
         create_global_venv
         echo -e "${GREEN}✓ Global virtual environment setup complete${NC}"
+        # Install setuptools in venv (for nodegyp/unixdgram when using venv Python)
+        if ! "$HOME/.local/venv/bin/python" -c "import setuptools" 2>/dev/null; then
+            echo -e "${YELLOW}Installing setuptools in global venv...${NC}"
+            "$HOME/.local/venv/bin/pip" install setuptools
+        fi
     else
         echo -e "${YELLOW}Warning: aliases.sh not found, skipping global venv setup${NC}"
     fi
@@ -121,9 +110,11 @@ if [[ ! -f ~/.config/shell/private.sh ]]; then
 # Private configuration (not version controlled)
 # Add sensitive environment variables, tokens, etc. here
 
-# Example:
+# Examples (uncomment and set values):
 # export GITHUB_TOKEN="your_token_here"
-# export API_KEY="your_api_key_here"
+# export ARPALUS_REGISTRY_TOKEN="your_arpalus_jwt"
+# export PNPM_HOME="$HOME/Library/pnpm"
+# [[ -n "$PNPM_HOME" ]] && case ":$PATH:" in *":$PNPM_HOME:"*) ;; *) export PATH="$PNPM_HOME:$PATH" ;; esac
 EOF
     echo -e "${GREEN}✓ Created ~/.config/shell/private.sh${NC}"
 fi
@@ -157,8 +148,8 @@ fi
 echo ""
 # Reload shell config in this session (update is from aliases.sh, already sourced by install_packages)
 if type update &>/dev/null; then
-    update
-    echo -e "${YELLOW}💡 Restart other terminal sessions to pick up changes there too.${NC}"
+    update || true
+    echo -e "${YELLOW}💡 Restart other terminal sessions (or run 'update' from zsh) to pick up changes.${NC}"
 else
     echo -e "${YELLOW}💡 Run 'source ~/.zshenv' and 'source ~/.zshrc' (or restart) to pick up changes.${NC}"
 fi

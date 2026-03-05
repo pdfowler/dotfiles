@@ -13,3 +13,4 @@
 [[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
 
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Completed .zshenv load"
+true

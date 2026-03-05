@@ -50,21 +50,18 @@ git_commit_no_edit() {
 }
 
 # Utility functions (cross-shell compatible)
+# Reload config for the *current* shell (not $SHELL). Safe when install.sh runs in bash.
 update() {
-    case "$SHELL" in
-        */zsh)
-            echo "Reloading zsh configuration..."
-            source ~/.zshenv
-            source ~/.zshrc
-            ;;
-        */bash)
-            echo "Reloading bash configuration..."
-            source ~/.bashrc
-            ;;
-        *)
-            echo "Unknown shell: $SHELL"
-            ;;
-    esac
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        echo "Reloading zsh configuration..."
+        source ~/.zshenv
+        source ~/.zshrc
+    elif [[ -n "${BASH_VERSION:-}" ]]; then
+        echo "Reloading bash configuration..."
+        source ~/.bashrc
+    else
+        echo "Unknown shell (ZSH_VERSION=$ZSH_VERSION BASH_VERSION=$BASH_VERSION)"
+    fi
 }
 
 # Aliases for Shiftsmart Repos

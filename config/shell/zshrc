@@ -19,9 +19,9 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Plugins (git for branch in prompt; history-substring-search for key bindings below)
 plugins=(git history-substring-search)
 
-# Only load oh-my-zsh if not disabled (e.g., in Cursor Agent context)
-if [[ -z "$DISABLE_OH_MY_ZSH" ]]; then
-    source $ZSH/oh-my-zsh.sh
+# Only load oh-my-zsh if present and not disabled (e.g., in Cursor Agent context)
+if [[ -z "$DISABLE_OH_MY_ZSH" ]] && [[ -f "$ZSH/oh-my-zsh.sh" ]]; then
+    source "$ZSH/oh-my-zsh.sh"
 fi
 
 # Apply Powerlevel10k config from dotfiles (same on every machine)
@@ -57,8 +57,8 @@ setopt AUTO_MENU
 setopt COMPLETE_IN_WORD
 setopt ALWAYS_TO_END
 
-# kubectl completion for zsh
-if command -v kubectl &> /dev/null; then
+# kubectl completion for zsh (requires compdef from OMZ/compinit)
+if command -v kubectl &> /dev/null && (( $+functions[compdef] )); then
     source <(kubectl completion zsh)
 fi
 
@@ -72,9 +72,9 @@ setopt EXTENDED_GLOB
 setopt NO_CASE_GLOB
 setopt NUMERIC_GLOB_SORT
 
-# Key bindings
-bindkey '^[[A' history-substring-search-up
-bindkey '^[[B' history-substring-search-down
+# Key bindings (history-substring-search only when OMZ loaded the plugin)
+(( $+functions[history-substring-search-up] )) && bindkey '^[[A' history-substring-search-up
+(( $+functions[history-substring-search-down] )) && bindkey '^[[B' history-substring-search-down
 bindkey '^[[1;5C' forward-word
 bindkey '^[[1;5D' backward-word
 

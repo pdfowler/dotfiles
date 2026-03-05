@@ -26,6 +26,9 @@ check_installed() {
 setup_system_auto() {
     echo -e "${BLUE}Setting up complete system configuration...${NC}"
     
+    # Oh-My-Zsh (required for Powerlevel10k and zshrc plugins)
+    install_oh_my_zsh
+    
     # Setup Node.js environment with NVM (following Shiftsmart best practices)
     setup_nodejs_environment_auto
     
@@ -50,6 +53,21 @@ setup_system_auto() {
     setup_python_environment_auto
     
     echo -e "${GREEN}✅ Complete system setup finished!${NC}"
+}
+
+# Oh-My-Zsh - framework for zsh (needed for Powerlevel10k and plugins)
+install_oh_my_zsh() {
+    echo -e "${BLUE}Installing Oh-My-Zsh...${NC}"
+    local omz_dir="$HOME/.oh-my-zsh"
+    if [[ -f "$omz_dir/oh-my-zsh.sh" ]]; then
+        echo -e "${GREEN}✓ Oh-My-Zsh is already installed${NC}"
+        return 0
+    fi
+    if git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$omz_dir" 2>/dev/null; then
+        echo -e "${GREEN}✓ Oh-My-Zsh installed${NC}"
+    else
+        echo -e "${YELLOW}⚠ Oh-My-Zsh clone failed. Install manually: git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git $omz_dir${NC}"
+    fi
 }
 
 # Powerlevel10k - zsh theme (powerline style with icons, time, duration)
