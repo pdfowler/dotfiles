@@ -4,6 +4,9 @@
 # To enable debug output for the custom cd() function, set:
 # export DEBUG_CD=1
 
+# Shell Path Overrides
+alias ssh='/usr/bin/ssh'
+
 # Basic aliases
 alias ll="ls -la" # long list
 alias la="ls -A"  # list all except . and ..

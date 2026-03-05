@@ -79,23 +79,36 @@ source ~/.zshrc
 ## ✨ Features
 
 ### **Shell Loading Strategy**
-- **`.zshenv`** → Environment variables, PATH, essential configs (always loaded)
-- **`.zprofile`** → Login shell specific configs  
-- **`.zshrc`** → Interactive features (oh-my-zsh, completions, prompt)
+- **`.zshenv`** → Env, paths, aliases (always loaded by zsh)
+- **`.zprofile`** → Login shells + GUI apps: PATH, env, BASH_ENV
+- **`.zshrc`** → Interactive zsh: oh-my-zsh, software.sh
+- **`.bashrc`** → Env, paths, aliases (when bash sources it)
+- **`.bash_profile`** → Login bash: sources .bashrc
+- **`BASH_ENV`** → Non-interactive bash: sources `~/.config/shell/bash_env`
+
+### **Cross-Shell Parity**
+Config is available in both zsh and bash (interactive and non-interactive):
+- **Zsh**: `.zshenv` loads env, paths, aliases for every invocation
+- **Bash**: `BASH_ENV` → `bash_env` for non-interactive; `.bashrc` for interactive/login
+- **GUI apps** (Cursor, etc.): `.zprofile` sources env so spawned processes inherit BASH_ENV, DOTFILES_ROOT, etc.
+
+**Cursor Agent note**: Agent terminals may default to bash with a custom init. If `gt`, aliases, or env vars are missing, add to `~/.cursor/settings.json` (or Cursor User settings):
+```json
+"terminal.integrated.automationProfile.osx": { "path": "/bin/zsh" }
+```
 
 ### **Cross-Shell Testing**
 ```bash
-# Test non-interactive shell access
-zsh -c 'echo $EDITOR'
+# Zsh non-interactive
+zsh -c 'echo $DOTFILES_ROOT && type gt'
 
-# Test bash compatibility  
-bash -c 'source ~/.config/shell/env.sh && echo $EDITOR'
+# Bash non-interactive (requires BASH_ENV from parent, e.g. after login)
+bash -c 'echo $DOTFILES_ROOT && type gt'
 ```
 
 ### **Automatic Version Switching**
-- **zsh-nvm plugin** configured for directory-based Node version switching
+- **NVM** with `nvm use` on directory change (chpwd hook when `.nvmrc` exists)
 - **Auto-detection** of `.nvmrc` files
-- **Lazy loading** for performance
 
 ## 🔧 Usage
 

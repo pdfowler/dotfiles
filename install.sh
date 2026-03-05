@@ -94,6 +94,7 @@ create_symlink "$DOTFILES_DIR/config/shell/aliases.sh" "$HOME/.config/shell/alia
 create_symlink "$DOTFILES_DIR/config/shell/software.sh" "$HOME/.config/shell/software.sh"
 create_symlink "$DOTFILES_DIR/config/shell/install-mongodb-tools-direct.sh" "$HOME/.config/shell/install-mongodb-tools-direct.sh"
 create_symlink "$DOTFILES_DIR/config/shell/cleanup-merged-branches.sh" "$HOME/.config/shell/cleanup-merged-branches.sh"
+create_symlink "$DOTFILES_DIR/config/shell/bash_env" "$HOME/.config/shell/bash_env"
 
 # Create symlinks for shell-specific files
 echo -e "${YELLOW}Creating shell-specific configuration symlinks...${NC}"
@@ -101,7 +102,8 @@ create_symlink "$DOTFILES_DIR/config/shell/zshenv" "$HOME/.zshenv"
 create_symlink "$DOTFILES_DIR/config/shell/zprofile" "$HOME/.zprofile"
 create_symlink "$DOTFILES_DIR/config/shell/zshrc" "$HOME/.zshrc"
 create_symlink "$DOTFILES_DIR/config/shell/bashrc" "$HOME/.bashrc"
-create_symlink "$DOTFILES_DIR/config/shell/zsh/.p10k.zsh" "$HOME/.p10k.zsh"
+create_symlink "$DOTFILES_DIR/config/shell/bash_profile" "$HOME/.bash_profile"
+[[ -f "$DOTFILES_DIR/config/shell/zsh/.p10k.zsh" ]] && create_symlink "$DOTFILES_DIR/config/shell/zsh/.p10k.zsh" "$HOME/.p10k.zsh"
 
 # Optional: Create a private config file if it doesn't exist
 if [[ ! -f ~/.config/shell/private.sh ]]; then

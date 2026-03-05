@@ -92,11 +92,8 @@ if is_interactive_shell && [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
-    # Auto-switch to .nvmrc version if available (following Shiftsmart's emphasis on auto-switching)
-    # This is critical for project-specific Node.js versions
-    if [[ -f ".nvmrc" ]] && command -v nvm >/dev/null 2>&1; then
-        nvm use >/dev/null 2>&1 || true  # Silently fail if version not installed
-    fi
+    # Auto-switch: nvm use on startup (re-evaluates .nvmrc in cwd/parents, or default if none)
+    command -v nvm >/dev/null 2>&1 && nvm use >/dev/null 2>&1 || true
 
     # Auto-fix NVM PATH corruption issues on startup
     # This prevents "command not found: tr/tail/head/sed" errors
@@ -125,6 +122,16 @@ if is_interactive_shell && [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]
 
     # Run the auto-fix
     auto_fix_nvm_path
+
+    # NVM auto-use on every directory change: uses .nvmrc in cwd/parents, or default when leaving projects
+    # PATH-safe to prevent tr/tail/head/sed errors; runs sync (env change must apply to current shell)
+    if [[ -n "${ZSH_VERSION:-}" ]] && command -v nvm >/dev/null 2>&1; then
+        _dotfiles_nvm_auto_use() {
+            export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+            nvm use >/dev/null 2>&1 || true
+        }
+        autoload -U add-zsh-hook 2>/dev/null && add-zsh-hook chpwd _dotfiles_nvm_auto_use
+    fi
 fi
 
 # Python/pyenv setup

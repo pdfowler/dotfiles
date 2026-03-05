@@ -1,0 +1,6 @@
+# Bash non-interactive init (sourced via BASH_ENV)
+# Equivalent to zsh's .zshenv - gives bash access to same config when run non-interactively
+# Used by: bash -c "cmd", scripts, agent subprocesses, etc.
+[[ -f ~/.config/shell/env.sh ]] && source ~/.config/shell/env.sh
+[[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
+[[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh

@@ -74,6 +74,9 @@ export DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/Development/dotfiles}"
 # Unset or "CHARCOAL" = use brew-installed gt (default).
 # Set to a path = use that local charcoal repo (e.g. in private.sh: export GT_SOURCE="$HOME/Dev/charcoal").
 
+# BASH_ENV: when non-interactive bash runs, it sources this file (bash's equivalent to zshenv)
+export BASH_ENV="$HOME/.config/shell/bash_env"
+
 # Source private configuration (contains sensitive data like API keys, tokens)
 # This is also sourced in zshenv, but adding here as backup for cross-shell compatibility
 [[ -f ~/.config/shell/private.sh ]] && source ~/.config/shell/private.sh

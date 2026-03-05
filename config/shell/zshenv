@@ -12,5 +12,10 @@
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing paths.sh"
 [[ -f ~/.config/shell/paths.sh ]] && source ~/.config/shell/paths.sh
 
+# Aliases/functions for non-interactive shells (agents, gt stack sync, etc.)
+# Previously only in .zshrc; agents run non-interactive and need gt, cd @*, etc.
+[[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Sourcing aliases.sh"
+[[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
+
 [[ -n "$DEBUG_SHELL_INIT" ]] && echo "[.zshenv] Completed .zshenv load"
 true

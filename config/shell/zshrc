@@ -32,13 +32,9 @@ fi
 # User configuration
 
 # Source modular configuration files
-# These are already loaded by .zshenv for non-interactive shells,
-# but we source them again here for interactive shells to ensure
-# all configurations are available
-
-# Source interactive-only functions and aliases.
+# env.sh, paths.sh, aliases.sh are loaded by .zshenv (all zsh invocations)
+# Software.sh is interactive-only (install helpers, completions, etc.)
 [[ -f ~/.config/shell/software.sh ]] && source ~/.config/shell/software.sh
-[[ -f ~/.config/shell/aliases.sh ]] && source ~/.config/shell/aliases.sh
 
 # Zsh-specific configurations
 # History configuration
