@@ -135,15 +135,16 @@ if is_interactive_shell && [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]
 fi
 
 # Python/pyenv setup
-# Check if pyenv is available (either via Homebrew or in PYENV_ROOT/bin)
-# virtualenv-init is optional (pyenv-virtualenv plugin); suppress "no such command" if missing
-if is_interactive_shell && command -v pyenv >/dev/null 2>&1; then
-    # pyenv is already in PATH (e.g., via Homebrew), just initialize it
-    eval "$(pyenv init - 2>/dev/null)" || true
-    eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
-elif is_interactive_shell && [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
-    # pyenv is in PYENV_ROOT/bin but not in PATH, add it and initialize
+# Keep pyenv available on PATH, but do not auto-initialize in new shells.
+# This prevents automatic version/virtualenv activation on shell startup.
+if [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
     export PATH="$PYENV_ROOT/bin:$PATH"
+fi
+
+# Optional opt-in autoinit:
+#   export PYENV_AUTO_INIT=1
+# in ~/.config/shell/private.sh if you want old behavior back.
+if is_interactive_shell && [[ "${PYENV_AUTO_INIT:-0}" == "1" ]] && command -v pyenv >/dev/null 2>&1; then
     eval "$(pyenv init - 2>/dev/null)" || true
     eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
 fi
