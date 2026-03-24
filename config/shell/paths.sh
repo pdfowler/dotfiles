@@ -135,18 +135,27 @@ if is_interactive_shell && [[ -d "$HOME/.nvm" ]] && [[ -f "$HOME/.nvm/nvm.sh" ]]
 fi
 
 # Python/pyenv setup
-# Keep pyenv available on PATH, but do not auto-initialize in new shells.
-# This prevents automatic version/virtualenv activation on shell startup.
+# Ensure pyenv binary is on PATH (Homebrew may already provide it).
 if [[ -d "$PYENV_ROOT/bin" ]] && [[ -f "$PYENV_ROOT/bin/pyenv" ]]; then
     export PATH="$PYENV_ROOT/bin:$PATH"
 fi
 
-# Optional opt-in autoinit:
-#   export PYENV_AUTO_INIT=1
-# in ~/.config/shell/private.sh if you want old behavior back.
-if is_interactive_shell && [[ "${PYENV_AUTO_INIT:-0}" == "1" ]] && command -v pyenv >/dev/null 2>&1; then
-    eval "$(pyenv init - 2>/dev/null)" || true
-    eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
+# Interactive: pyenv init adds the `pyenv` shell function so `pyenv shell` works.
+# Cursor/VS Code Python often runs `pyenv shell <ver>` when opening a terminal if the
+# workspace has a pyenv interpreter / .python-version — without init, that errors.
+#
+# Opt out of all pyenv shell integration: PYENV_AUTO_INIT=0 in ~/.config/shell/private.sh
+# (then disable Python terminal activation in the editor, or use another interpreter).
+#
+# pyenv-virtualenv plugin (auto-activate on cd) is separate; opt in with:
+#   PYENV_AUTO_VIRTUALENV=1
+if is_interactive_shell && command -v pyenv >/dev/null 2>&1; then
+    if [[ "${PYENV_AUTO_INIT:-1}" != "0" ]]; then
+        eval "$(pyenv init - 2>/dev/null)" || true
+    fi
+    if [[ "${PYENV_AUTO_VIRTUALENV:-0}" == "1" ]]; then
+        eval "$(pyenv virtualenv-init - 2>/dev/null)" || true
+    fi
 fi
 
 # Google Cloud SDK
